@@ -19,7 +19,7 @@ class DoubanScoreFetcher:
     """豆瓣评分获取器 - 生产级版本"""
     
     def __init__(self, db_config: Dict[str, any], 
-                 max_requests_per_second: float = 2.0,
+                 max_requests_per_second: float = 0.1,
                  use_proxy: bool = False,
                  proxy_list: list = None):
         """
@@ -33,8 +33,8 @@ class DoubanScoreFetcher:
         """
         # 初始化组件
         self.db = DatabaseManager(db_config)
-        self.api_client = ApiClient(use_proxy=use_proxy, proxy_list=proxy_list or [])
-        self.rate_limiter = TokenBucket(rate=max_requests_per_second, capacity=5)
+        self.rate_limiter = TokenBucket(rate=max_requests_per_second, capacity=1)  # capacity=1确保严格限速
+        self.api_client = ApiClient(use_proxy=use_proxy, proxy_list=proxy_list or [], rate_limiter=self.rate_limiter)
         self.monitor = RateLimitMonitor()
         
         # 统计文件
@@ -73,10 +73,7 @@ class DoubanScoreFetcher:
         vod_year = video.get('vod_year', '')
         
         try:
-            # 速率限制
-            self.rate_limiter.acquire(timeout=60)
-            
-            # 1. 搜索视频
+            # 1. 搜索视频（API调用前会自动进行速率限制）
             search_results = self.api_client.search_video(vod_name, monitor=self.monitor)
             
             if search_results is None:
@@ -159,7 +156,7 @@ class DoubanScoreFetcher:
             return f"{hours}小时{minutes}分钟"
     
     def run(self, batch_size: int = 500, 
-            max_requests_per_second: float = 2.0,
+            max_requests_per_second: float = 0.1,
             adjust_rate: bool = True):
         """
         运行主任务

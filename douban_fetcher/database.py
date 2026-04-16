@@ -110,7 +110,7 @@ class DatabaseManager:
                             vod_blurb = CASE WHEN %s != '' THEN LEFT(%s, 255) ELSE vod_blurb END,
                             vod_content = CASE WHEN %s != '' THEN %s ELSE vod_content END,
                             vod_total = CASE WHEN %s > 0 THEN %s ELSE vod_total END,
-                            vod_duration = CASE WHEN %s > 0 THEN %s ELSE vod_duration END,
+                            vod_duration = CASE WHEN %s != '0分钟' THEN LEFT(%s, 10) ELSE vod_duration END,
                             vod_pubdate = CASE WHEN %s != '' THEN LEFT(%s, 100) ELSE vod_pubdate END,
                             vod_sub = CASE WHEN %s != '' THEN LEFT(%s, 255) ELSE vod_sub END,
                             vod_tag = CASE WHEN %s != '' THEN LEFT(%s, 100) ELSE vod_tag END,

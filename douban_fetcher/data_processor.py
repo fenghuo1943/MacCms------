@@ -144,7 +144,9 @@ class DataProcessor:
             info['doubanRating'] = float(info['doubanRating']) if info['doubanRating'] else 0.0
             info['doubanVotes'] = int(info['doubanVotes']) if info['doubanVotes'] else 0
             info['episodes'] = int(info['episodes']) if info['episodes'] else 0
-            info['duration'] = int(info['duration']) if info['duration'] else 0
+            # 将秒转换为分钟，并添加"分钟"字样
+            duration_seconds = int(info['duration']) if info['duration'] else 0
+            info['duration'] = f"{duration_seconds // 60}分钟" if duration_seconds > 0 else "0分钟"
         except (ValueError, TypeError):
             pass
         

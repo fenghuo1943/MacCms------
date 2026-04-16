@@ -11,10 +11,11 @@ from .config import logger, API_CONFIG, DOUBAN_API_CONFIG
 class ApiClient:
     """WMDB API客户端"""
     
-    def __init__(self, use_proxy: bool = False, proxy_list: List[str] = None):
+    def __init__(self, use_proxy: bool = False, proxy_list: List[str] = None, rate_limiter=None):
         self.use_proxy = use_proxy
         self.proxy_list = proxy_list or []
         self.current_proxy_index = 0
+        self.rate_limiter = rate_limiter  # 速率限制器
         
         self.session = requests.Session()
         self.session.headers.update(API_CONFIG['headers'])
@@ -40,6 +41,10 @@ class ApiClient:
         Returns:
             搜索结果列表，失败返回None
         """
+        # 在API调用前进行速率限制
+        if self.rate_limiter:
+            self.rate_limiter.acquire(timeout=60)
+        
         url = API_CONFIG['base_url']
         params = {'q': video_name}
         
@@ -129,6 +134,10 @@ class ApiClient:
                 monitor.record_request(False)
             return None
         
+        # 在API调用前进行速率限制
+        if self.rate_limiter:
+            self.rate_limiter.acquire(timeout=60)
+        
         url = f"{DOUBAN_API_CONFIG['base_url']}{imdb_id}"
         
         base_delay = 1
@@ -213,6 +222,10 @@ class ApiClient:
             if monitor:
                 monitor.record_request(False)
             return None
+        
+        # 在API调用前进行速率限制
+        if self.rate_limiter:
+            self.rate_limiter.acquire(timeout=60)
         
         # 使用subject路径而不是imdb路径
         url = f"https://api.douban.com/v2/movie/subject/{douban_id}"

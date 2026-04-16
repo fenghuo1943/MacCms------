@@ -40,7 +40,7 @@ class VideoInfo:
             'type': '',
             'alias': '',
             'episodes': 0,
-            'duration': 0,
+            'duration': '0分钟',
             'dateReleased': '',
             'actors': '',
             'directors': '',
