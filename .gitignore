@@ -19,11 +19,35 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
 # 虚拟环境
 venv/
 env/
 ENV/
+.venv/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
 
 # IDE
 .vscode/
@@ -31,16 +55,48 @@ ENV/
 *.swp
 *.swo
 *~
+.project
+.pydevproject
+.settings/
+
+# Jupyter Notebook
+.ipynb_checkpoints
 
 # 日志和运行时文件
 *.log
 fetch_stats.json
 report_*.json
 
+# 测试脚本（可选，如果想保留测试脚本则删除下面这行）
+# test_*.py
+
+# 临时文件
+*.tmp
+*.temp
+
 # 数据库备份
 *.sql.bak
 *.db
+*.sqlite3
 
 # 操作系统
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# 环境变量文件（包含敏感信息）
+.env
+.env.local
+.env.*.local
+
+# 配置文件（如果包含敏感信息，如数据库密码）
+# config.py
+# .config/
+
+# 文档生成
+docs/_build/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
