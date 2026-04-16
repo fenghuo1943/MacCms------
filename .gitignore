@@ -64,7 +64,6 @@ coverage.xml
 
 # 日志和运行时文件
 *.log
-fetch_stats.json
 report_*.json
 
 # 测试脚本（可选，如果想保留测试脚本则删除下面这行）
