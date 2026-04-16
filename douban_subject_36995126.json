@@ -1,0 +1,99 @@
+{
+  "rating": {
+    "max": 10,
+    "average": 7.2,
+    "stars": "40",
+    "min": 0
+  },
+  "reviews_count": 38,
+  "wish_count": 34171,
+  "douban_site": "",
+  "year": "2026",
+  "images": {
+    "small": "https://img1.doubanio.com/view/photo/s_ratio_poster/public/p2929524190.jpg",
+    "large": "https://img1.doubanio.com/view/photo/s_ratio_poster/public/p2929524190.jpg",
+    "medium": "https://img1.doubanio.com/view/photo/s_ratio_poster/public/p2929524190.jpg"
+  },
+  "alt": "https://movie.douban.com/subject/36995126/",
+  "id": "36995126",
+  "mobile_url": "https://movie.douban.com/subject/36995126/mobile",
+  "title": "爱情抓马",
+  "do_count": null,
+  "share_url": "https://m.douban.com/movie/subject/36995126",
+  "seasons_count": null,
+  "schedule_url": "",
+  "episodes_count": null,
+  "countries": [
+    "美国"
+  ],
+  "genres": [
+    "爱情"
+  ],
+  "collect_count": 5809,
+  "casts": [
+    {
+      "alt": "https://movie.douban.com/celebrity/1035656/",
+      "avatars": {
+        "small": "https://img2.doubanio.com/view/personage/m/public/8ff8b30eabb44cd3a3810c9c55fa6ef1.jpg",
+        "large": "https://img2.doubanio.com/view/personage/m/public/8ff8b30eabb44cd3a3810c9c55fa6ef1.jpg",
+        "medium": "https://img2.doubanio.com/view/personage/m/public/8ff8b30eabb44cd3a3810c9c55fa6ef1.jpg"
+      },
+      "name": "罗伯特·帕丁森",
+      "id": "1035656"
+    },
+    {
+      "alt": "https://movie.douban.com/celebrity/1325576/",
+      "avatars": {
+        "small": "https://img3.doubanio.com/view/personage/m/public/53f007bb065a6b04f0c058c62751c187.jpg",
+        "large": "https://img3.doubanio.com/view/personage/m/public/53f007bb065a6b04f0c058c62751c187.jpg",
+        "medium": "https://img3.doubanio.com/view/personage/m/public/53f007bb065a6b04f0c058c62751c187.jpg"
+      },
+      "name": "赞达亚",
+      "id": "1325576"
+    },
+    {
+      "alt": "https://movie.douban.com/celebrity/1372982/",
+      "avatars": {
+        "small": "https://img1.doubanio.com/view/celebrity/m/public/p1493692981.68.jpg",
+        "large": "https://img1.doubanio.com/view/celebrity/m/public/p1493692981.68.jpg",
+        "medium": "https://img1.doubanio.com/view/celebrity/m/public/p1493692981.68.jpg"
+      },
+      "name": "马莫多·阿西",
+      "id": "1372982"
+    },
+    {
+      "alt": "https://movie.douban.com/celebrity/1443907/",
+      "avatars": {
+        "small": "https://img3.doubanio.com/view/personage/m/public/5b2198aa1c03a8a10e295b5cb928889f.jpg",
+        "large": "https://img3.doubanio.com/view/personage/m/public/5b2198aa1c03a8a10e295b5cb928889f.jpg",
+        "medium": "https://img3.doubanio.com/view/personage/m/public/5b2198aa1c03a8a10e295b5cb928889f.jpg"
+      },
+      "name": "阿拉娜·哈伊姆",
+      "id": "1443907"
+    }
+  ],
+  "current_season": null,
+  "original_title": "The Drama",
+  "summary": "婚礼前几天，一对情侣无意中发现彼此的秘密，亲密关系面临考验，令结婚计划骤然生变。暗黑秘密如何一发不可收拾？各种反应又引致怎样翻天覆地的后果？原定又浪漫又幸福的结婚计划，还可以进行吗？",
+  "subtype": "movie",
+  "directors": [
+    {
+      "alt": "https://movie.douban.com/celebrity/1470451/",
+      "avatars": {
+        "small": "https://img1.doubanio.com/view/personage/m/public/741f2de53032aa9364648ad47716410b.jpg",
+        "large": "https://img1.doubanio.com/view/personage/m/public/741f2de53032aa9364648ad47716410b.jpg",
+        "medium": "https://img1.doubanio.com/view/personage/m/public/741f2de53032aa9364648ad47716410b.jpg"
+      },
+      "name": "克里斯托弗·博格利",
+      "id": "1470451"
+    }
+  ],
+  "comments_count": 3034,
+  "ratings_count": 5227,
+  "aka": [
+    "抓马恋人(台)",
+    "戏剧性婚礼(港)",
+    "抓马",
+    "戏剧故事"
+  ]
+}
