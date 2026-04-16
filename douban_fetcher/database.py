@@ -152,7 +152,7 @@ class DatabaseManager:
                     """
                     cursor.execute(sql, (status, vod_id))
                 
-                logger.info(f"更新视频 {vod_id} 的状态为 {status}")
+                #logger.info(f"更新视频 {vod_id} 的状态为 {status}")
                 
         except Exception as e:
             logger.error(f"更新视频 {vod_id} 失败: {str(e)}")
