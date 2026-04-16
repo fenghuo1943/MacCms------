@@ -220,66 +220,153 @@ class DataProcessor:
             return text
     
     @staticmethod
-    def extract_douban_info(douban_data: Dict) -> Dict:
+    def extract_douban_subject_info(douban_data: Dict) -> Dict:
         """
-        从豆瓣API返回数据中提取需要的信息
-        支持两种API返回格式：
-        1. IMDB API: /v2/movie/imdb/{imdbId}
-        2. Subject API: /v2/movie/subject/{doubanId}
+        从豆瓣Subject API返回数据中提取详细信息
         
         Args:
-            douban_data: 豆瓣API返回的数据
+            douban_data: 豆瓣Subject API返回的数据
             
         Returns:
-            提取的信息字典
+            提取的详细信息字典
         """
         info = {}
         
-        # 提取评分信息
+        # 基本信息
+        info['doubanId'] = douban_data.get('id', '')
+        info['title'] = douban_data.get('title', '')
+        info['originalTitle'] = douban_data.get('original_title', '')
+        info['year'] = douban_data.get('year', '')
+        
+        # 评分信息
         if 'rating' in douban_data and isinstance(douban_data['rating'], dict):
             rating = douban_data['rating']
-            # average可能是字符串或数字
             avg = rating.get('average', 0.0)
             info['doubanRating'] = float(avg) if avg else 0.0
             
-            # numRaters可能在rating中，也可能在根级别（ratings_count）
-            num_raters = rating.get('numRaters') or douban_data.get('ratings_count', 0)
+            # 评分人数
+            num_raters = douban_data.get('ratings_count', 0)
             info['doubanVotes'] = int(num_raters) if num_raters else 0
         
-        # 提取标签
-        if 'tags' in douban_data and isinstance(douban_data['tags'], list):
-            tags = []
-            for tag in douban_data['tags']:
-                if isinstance(tag, dict) and 'name' in tag:
-                    tag_name = DataProcessor.decode_unicode_string(tag['name'])
-                    tags.append(tag_name)
-            info['tags'] = ','.join(tags[:10])  # 只取前10个标签
+        # 简介
+        info['description'] = douban_data.get('summary', '')
+        
+        # 导演
+        if 'directors' in douban_data and isinstance(douban_data['directors'], list):
+            directors = [d.get('name', '') for d in douban_data['directors'] if d.get('name')]
+            info['directors'] = ','.join(directors)
+        
+        # 演员（可用于后续扩展）
+        if 'casts' in douban_data and isinstance(douban_data['casts'], list):
+            casts = [c.get('name', '') for c in douban_data['casts'] if c.get('name')]
+            info['casts'] = ','.join(casts[:10])  # 只取前10个
+        
+        # 类型/标签
+        if 'genres' in douban_data and isinstance(douban_data['genres'], list):
+            info['tags'] = ','.join(douban_data['genres'])
+        
+        # 别名
+        if 'aka' in douban_data and isinstance(douban_data['aka'], list):
+            info['alias'] = ','.join(douban_data['aka'])
+        
+        # 季数和集数（电视剧）
+        info['seasons_count'] = douban_data.get('seasons_count')
+        info['current_season'] = douban_data.get('current_season')
+        info['episodes_count'] = douban_data.get('episodes_count')
+        
+        # 国家
+        if 'countries' in douban_data and isinstance(douban_data['countries'], list):
+            info['country'] = ','.join(douban_data['countries'])
+        
+        # 子类型（movie/tv）
+        info['subtype'] = douban_data.get('subtype', '')
         
         return info
     
     @staticmethod
-    def merge_video_info(wmdb_info: Dict, douban_info: Dict) -> Dict:
+    def match_douban_search_results(search_results: List[Dict], target_name: str, target_year: str) -> Optional[Dict]:
         """
-        合并WMDB和豆瓣API的信息
+        从豆瓣搜索结果中匹配目标视频
         
         Args:
-            wmdb_info: 从WMDB API提取的信息
-            douban_info: 从豆瓣API提取的信息
+            search_results: 豆瓣搜索结果列表
+            target_name: 目标视频名称
+            target_year: 目标视频年份
             
         Returns:
-            合并后的信息字典
+            匹配的搜索结果，None表示未匹配
         """
-        merged = wmdb_info.copy()
+        import re
         
-        # 用豆瓣API的评分覆盖WMDB的评分（如果豆瓣API有数据）
-        if douban_info.get('doubanRating', 0.0) > 0:
-            merged['doubanRating'] = douban_info['doubanRating']
+        if not search_results:
+            return None
         
-        if douban_info.get('doubanVotes', 0) > 0:
-            merged['doubanVotes'] = douban_info['doubanVotes']
+        matched_videos = []
         
-        # 添加标签
-        if douban_info.get('tags'):
-            merged['tags'] = douban_info['tags']
+        for result in search_results:
+            result_name = result.get('title', '')
+            result_year = str(result.get('year', ''))
+            
+            if not result_name:
+                continue
+            
+            # 检查名称是否精确匹配
+            name_match = target_name.strip() == result_name.strip()
+            
+            # 检查年份是否匹配
+            year_match = False
+            if target_year and target_year.strip():
+                # 提取纯数字年份
+                target_years = re.findall(r'\d{4}', target_year.strip())
+                result_years = re.findall(r'\d{4}', result_year.strip())
+                
+                if target_years and result_years:
+                    if len(target_years) == 1:
+                        year_match = target_years[0] in result_years
+                    else:
+                        year_match = bool(set(target_years) & set(result_years))
+                else:
+                    year_match = target_year.strip() == result_year.strip()
+            else:
+                # 如果没有年份信息，只匹配名称
+                year_match = True
+            
+            if name_match and year_match:
+                matched_videos.append(result)
         
-        return merged
+        if len(matched_videos) == 1:
+            return matched_videos[0]
+        elif len(matched_videos) > 1:
+            return 'multiple'
+        else:
+            return None
+    
+    @staticmethod
+    def prepare_db_info_from_douban(douban_info: Dict) -> Dict:
+        """
+        准备用于数据库更新的信息（仅使用豆瓣API）
+        
+        Args:
+            douban_info: 从豆瓣Subject API提取的信息
+            
+        Returns:
+            符合数据库要求的信息字典
+        """
+        # 创建符合数据库要求的信息结构
+        info = {
+            'doubanId': douban_info.get('doubanId', ''),
+            'doubanRating': douban_info.get('doubanRating', 0.0),
+            'doubanVotes': douban_info.get('doubanVotes', 0),
+            'imdbId': '',  # 豆瓣API不提供
+            'imdbRating': '',  # 豆瓣API不提供
+            'imdbVotes': 0,  # 豆瓣API不提供
+            'writers': '',  # 豆瓣API不提供
+            'description': douban_info.get('description', ''),
+            'episodes': int(douban_info.get('episodes_count', 0) or 0),
+            'duration': 0,  # 豆瓣API不直接提供单集片长
+            'dateReleased': douban_info.get('year', ''),  # 使用年份作为上映时间
+            'alias': douban_info.get('alias', ''),
+            'tags': douban_info.get('tags', ''),
+        }
+        
+        return info

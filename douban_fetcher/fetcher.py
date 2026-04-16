@@ -60,7 +60,7 @@ class DoubanScoreFetcher:
     
     def process_single_video(self, video: Dict) -> Tuple[int, bool, str]:
         """
-        处理单个视频
+        处理单个视频（使用豆瓣API）
         
         Args:
             video: 视频信息字典
@@ -76,13 +76,13 @@ class DoubanScoreFetcher:
             # 速率限制
             self.rate_limiter.acquire(timeout=60)
             
-            # 1. 搜索视频
-            search_results = self.api_client.search_video(vod_name, monitor=self.monitor)
+            # 1. 使用豆瓣搜索API
+            search_results = self.api_client.search_douban(vod_name, monitor=self.monitor)
             
             if search_results is None:
                 # API请求失败
                 self.db.update_video_score(vod_id, {}, FetchStatus.ERROR)
-                return (vod_id, False, "API请求失败")
+                return (vod_id, False, "豆瓣API请求失败")
             
             if len(search_results) == 0:
                 # 无结果
@@ -90,7 +90,7 @@ class DoubanScoreFetcher:
                 return (vod_id, False, "无搜索结果")
             
             # 2. 匹配视频
-            matched = DataProcessor.match_video(search_results, vod_name, vod_year)
+            matched = DataProcessor.match_douban_search_results(search_results, vod_name, vod_year)
             
             if matched == 'multiple':
                 # 多个结果
@@ -102,40 +102,33 @@ class DoubanScoreFetcher:
                 self.db.update_video_score(vod_id, {}, FetchStatus.NO_RESULT)
                 return (vod_id, False, "未找到匹配")
             
-            # 3. 提取WMDB信息
-            wmdb_info = DataProcessor.extract_video_info(matched)
+            # 3. 获取豆瓣ID
+            douban_id = matched.get('id', '')
+            if not douban_id:
+                self.db.update_video_score(vod_id, {}, FetchStatus.ERROR)
+                return (vod_id, False, "无法获取豆瓣ID")
             
-            # 4. 如果有IMDB ID或豆瓣ID，从豆瓣API获取更多信息
-            imdb_id = wmdb_info.get('imdbId', '')
-            douban_id = wmdb_info.get('doubanId', '')
-            douban_data = None
+            # 4. 使用Subject API获取详细信息
+            subject_data = self.api_client.get_douban_subject(douban_id, monitor=self.monitor)
             
-            if imdb_id:
-                # 优先使用IMDB ID
-                logger.debug(f"通过IMDB ID {imdb_id} 获取豆瓣信息")
-                douban_data = self.api_client.get_douban_by_imdb(imdb_id, monitor=self.monitor)
-            elif douban_id:
-                # 如果没有IMDB ID，使用豆瓣ID
-                logger.debug(f"通过豆瓣ID {douban_id} 获取豆瓣信息")
-                douban_data = self.api_client.get_douban_by_id(str(douban_id), monitor=self.monitor)
+            if not subject_data:
+                self.db.update_video_score(vod_id, {}, FetchStatus.ERROR)
+                return (vod_id, False, "获取豆瓣详情失败")
             
-            if douban_data:
-                # 提取豆瓣信息
-                douban_info = DataProcessor.extract_douban_info(douban_data)
-                # 合并两个API的信息
-                info = DataProcessor.merge_video_info(wmdb_info, douban_info)
-                logger.info(f"成功合并双API数据: IMDB={imdb_id or 'N/A'}, 豆瓣={douban_id or 'N/A'}")
-            else:
-                # 豆瓣API失败，使用WMDB数据
-                logger.warning(f"豆瓣API获取失败，使用WMDB数据: IMDB={imdb_id or 'N/A'}, 豆瓣={douban_id or 'N/A'}")
-                info = wmdb_info
+            # 5. 提取豆瓣信息
+            douban_info = DataProcessor.extract_douban_subject_info(subject_data)
             
-            # 5. 更新数据库
+            # 6. 准备数据库更新信息
+            info = DataProcessor.prepare_db_info_from_douban(douban_info)
+            
+            # 7. 更新数据库
             self.db.update_video_score(vod_id, info, FetchStatus.SUCCESS)
             
-            msg = f"豆瓣:{info['doubanRating']}({info['doubanVotes']}人) IMDB:{info['imdbRating']}({info['imdbVotes']}人)"
+            msg = f"豆瓣:{info['doubanRating']}({info['doubanVotes']}人)"
             if info.get('tags'):
-                msg += f" 标签:{info['tags'][:30]}"
+                msg += f" 类型:{info['tags'][:30]}"
+            if info.get('episodes'):
+                msg += f" 集数:{info['episodes']}"
             return (vod_id, True, msg)
             
         except Exception as e:

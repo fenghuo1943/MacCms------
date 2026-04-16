@@ -89,12 +89,17 @@ class DatabaseManager:
         try:
             with conn.cursor() as cursor:
                 if status == FetchStatus.SUCCESS:
-                    # 计算综合评分
+                    # 计算综合评分（如果只有豆瓣评分，就使用豆瓣评分）
+                    imdb_rating = info.get('imdbRating', '') or 0.0
+                    douban_rating = info.get('doubanRating', 0.0)
+                    imdb_votes = info.get('imdbVotes', 0) or 0
+                    douban_votes = info.get('doubanVotes', 0) or 0
+                    
                     combined_score, combined_votes = DataProcessor.calculate_combined_score(
-                        info['imdbRating'], 
-                        info['doubanRating'],
-                        info['imdbVotes'],
-                        info['doubanVotes']
+                        imdb_rating, 
+                        douban_rating,
+                        imdb_votes,
+                        douban_votes
                     )
                     
                     sql = """
