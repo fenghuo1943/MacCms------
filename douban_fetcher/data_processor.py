@@ -357,8 +357,8 @@ class DataProcessor:
             'doubanId': douban_info.get('doubanId', ''),
             'doubanRating': douban_info.get('doubanRating', 0.0),
             'doubanVotes': douban_info.get('doubanVotes', 0),
-            'imdbId': '',  # 豆瓣API不提供
-            'imdbRating': '',  # 豆瓣API不提供
+            'imdbId': None,  # 豆瓣API不提供，使用NULL
+            'imdbRating': None,  # 豆瓣API不提供，使用NULL
             'imdbVotes': 0,  # 豆瓣API不提供
             'writers': '',  # 豆瓣API不提供
             'description': douban_info.get('description', ''),
