@@ -95,6 +95,7 @@ class SeleniumDoubanFetcher:
                 douban_id = item.get('id', '')
                 title = item.get('title', '')
                 year = item.get('year', '')
+                director = item.get('directors', [{}])[0].get('name', '')
                 
                 # 确定类型
                 subtype = item.get('subtype', '')
@@ -106,6 +107,7 @@ class SeleniumDoubanFetcher:
                         'title': title,
                         'year': str(year) if year else '',
                         'type': content_type,
+                        'director': director,                        
                         'url': f'https://movie.douban.com/subject/{douban_id}/'
                     })
             
@@ -175,7 +177,9 @@ class SeleniumDoubanFetcher:
         """
         vod_id = video['vod_id']
         vod_name = video['vod_name']
+        vod_area = video.get('vod_area', '')
         vod_year = video.get('vod_year', '')
+        vod_director = video.get('vod_director', '')
         
         try:
             # 1. 使用API搜索豆瓣（快速）
@@ -196,7 +200,7 @@ class SeleniumDoubanFetcher:
             self.consecutive_no_results = 0
             
             # 2. 匹配视频（使用DataProcessor）
-            matched = DataProcessor.match_douban_search_results(search_results, vod_name, vod_year)
+            matched = DataProcessor.match_douban_search_results(search_results, vod_name, vod_year, vod_area, vod_director)
             
             if matched == 'multiple':
                 self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.MULTIPLE_RESULTS, self.worker_id)

@@ -45,7 +45,7 @@ class DatabaseManager:
         try:
             with conn.cursor() as cursor:
                 sql = """
-                    SELECT vod_id, vod_name, vod_year, vod_area
+                    SELECT vod_id, vod_name, vod_year, vod_area, vod_director
                     FROM mac_vod 
                     WHERE vod_fetch_status = %s 
                     ORDER BY vod_id ASC
@@ -53,7 +53,7 @@ class DatabaseManager:
                 """
                 cursor.execute(sql, (status, limit))
                 videos = cursor.fetchall()
-                logger.info(f"获取到 {len(videos)} 个待处理视频")
+                main_logger.info(f"获取到 {len(videos)} 个待处理视频")
                 return videos
         finally:
             conn.close()
@@ -113,7 +113,7 @@ class DatabaseManager:
                 
                 # 先选择要锁定的视频ID
                 cursor.execute("""
-                    SELECT vod_id, vod_name, vod_year, vod_area
+                    SELECT vod_id, vod_name, vod_year, vod_area, vod_director
                     FROM mac_vod 
                     WHERE vod_fetch_status = 1 
                       AND (vod_fetch_worker = '' OR vod_fetch_worker IS NULL)
@@ -140,16 +140,16 @@ class DatabaseManager:
                     """, [worker_id, current_time, current_time] + video_ids)
                     
                     conn.commit()
-                    logger.info(f"设备 {worker_id} 成功锁定 {len(videos)} 个视频")
+                    main_logger.info(f"设备 {worker_id} 成功锁定 {len(videos)} 个视频")
                 else:
                     conn.commit()
-                    logger.info(f"设备 {worker_id} 没有可锁定的视频")
+                    main_logger.info(f"设备 {worker_id} 没有可锁定的视频")
                 
                 return videos
                 
         except Exception as e:
             conn.rollback()
-            logger.error(f"锁定视频失败: {str(e)}")
+            main_logger.error(f"锁定视频失败: {str(e)}")
             raise
         finally:
             conn.close()
@@ -248,10 +248,10 @@ class DatabaseManager:
                     """
                     cursor.execute(sql, (status, vod_id))
                 
-                #logger.info(f"更新视频 {vod_id} 的状态为 {status}")
+                #main_logger.info(f"更新视频 {vod_id} 的状态为 {status}")
                 
         except Exception as e:
-            logger.error(f"更新视频 {vod_id} 失败: {str(e)}")
+            main_logger.error(f"更新视频 {vod_id} 失败: {str(e)}")
             raise
         finally:
             conn.close()
@@ -357,10 +357,10 @@ class DatabaseManager:
                     """
                     cursor.execute(sql, (status, vod_id))
                 
-                #logger.info(f"更新视频 {vod_id} 的状态为 {status}")
+                #main_logger.info(f"更新视频 {vod_id} 的状态为 {status}")
                 
         except Exception as e:
-            logger.error(f"更新视频 {vod_id} 失败: {str(e)}")
+            main_logger.error(f"更新视频 {vod_id} 失败: {str(e)}")
             raise
         finally:
             conn.close()

@@ -81,6 +81,7 @@ class DoubanScoreFetcher:
         vod_name = video['vod_name']
         vod_year = video.get('vod_year', '')
         vod_area = video.get('vod_area', '')
+        vod_director = video.get('vod_director', '')  # 获取导演信息
         
         try:
             # 速率限制
@@ -105,8 +106,8 @@ class DoubanScoreFetcher:
             # 有结果，重置连续无结果计数
             self.consecutive_no_results = 0
             
-            # 2. 匹配视频（传入地区信息）
-            matched = DataProcessor.match_douban_search_results(search_results, vod_name, vod_year, vod_area)
+            # 2. 匹配视频（传入地区信息和导演信息）
+            matched = DataProcessor.match_douban_search_results(search_results, vod_name, vod_year, vod_area, vod_director)
             
             if matched == 'multiple':
                 # 多个结果

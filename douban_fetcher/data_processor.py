@@ -304,15 +304,123 @@ class DataProcessor:
         return info
     
     @staticmethod
-    def match_douban_search_results(search_results: List[Dict], target_name: str, target_year: str, target_area: str = '') -> Optional[Dict]:
+    def calculate_similarity(str1: str, str2: str) -> float:
         """
-        从豆瓣搜索结果中匹配目标视频
+        计算两个字符串的相似度（基于编辑距离）
+        
+        Args:
+            str1: 第一个字符串
+            str2: 第二个字符串
+            
+        Returns:
+            相似度分数 (0-1)，1表示完全相同
+        """
+        if not str1 or not str2:
+            return 0.0
+        
+        # 转换为小写并标准化
+        str1 = str1.lower()
+        str2 = str2.lower()
+        
+        # 如果完全相同
+        if str1 == str2:
+            return 1.0
+        
+        # 计算编辑距离
+        len1, len2 = len(str1), len(str2)
+        
+        # 创建距离矩阵
+        dp = [[0] * (len2 + 1) for _ in range(len1 + 1)]
+        
+        # 初始化边界
+        for i in range(len1 + 1):
+            dp[i][0] = i
+        for j in range(len2 + 1):
+            dp[0][j] = j
+        
+        # 填充矩阵
+        for i in range(1, len1 + 1):
+            for j in range(1, len2 + 1):
+                if str1[i-1] == str2[j-1]:
+                    cost = 0
+                else:
+                    cost = 1
+                
+                dp[i][j] = min(
+                    dp[i-1][j] + 1,      # 删除
+                    dp[i][j-1] + 1,      # 插入
+                    dp[i-1][j-1] + cost  # 替换
+                )
+        
+        # 计算相似度
+        max_len = max(len1, len2)
+        similarity = 1 - (dp[len1][len2] / max_len)
+        
+        return similarity
+    
+    @staticmethod
+    def check_name_containment(name1: str, name2: str) -> bool:
+        """
+        检查两个名称是否存在包含关系
+        
+        Args:
+            name1: 第一个名称
+            name2: 第二个名称
+            
+        Returns:
+            是否存在包含关系
+        """
+        if not name1 or not name2:
+            return False
+        
+        # 标准化名称
+        norm1 = DataProcessor.normalize_name(name1)
+        norm2 = DataProcessor.normalize_name(name2)
+        
+        # 检查包含关系
+        if norm1 in norm2 or norm2 in norm1:
+            return True
+        
+        # 检查核心词匹配（处理“伟大的觉醒”vs“大觉醒”这种情况）
+        # 如果较短的字符串长度>=2，且其所有字符都在较长字符串中出现
+        if len(norm1) >= 2 and len(norm2) >= 2:
+            shorter = norm1 if len(norm1) < len(norm2) else norm2
+            longer = norm2 if len(norm1) < len(norm2) else norm1
+            
+            # 移除数字后再比较（避免“蜘蛛侠3”和“蜘蛛侠：英雄无归”误匹配）
+            import re
+            shorter_no_num = re.sub(r'\d', '', shorter)
+            longer_no_num = re.sub(r'\d', '', longer)
+            
+            # 如果去除数字后较短字符串仍然>=2个字符
+            if len(shorter_no_num) >= 2:
+                # 计算较短字符串中有多少字符在较长字符串中出现
+                common_chars = sum(1 for char in shorter_no_num if char in longer_no_num)
+                match_ratio = common_chars / len(shorter_no_num)
+                
+                # 更严格的条件：
+                # 1. 超过80%的字符都匹配
+                # 2. 或者较短字符串至少有4个字符且70%匹配
+                if (match_ratio >= 0.8) or (len(shorter_no_num) >= 4 and match_ratio >= 0.7):
+                    return True
+        
+        return False
+    
+    @staticmethod
+    def match_douban_search_results(search_results: List[Dict], target_name: str, target_year: str, target_area: str = '', target_director: str = '') -> Optional[Dict]:
+        """
+        从豆瓣搜索结果中匹配目标视频（增强版：分级匹配策略）
+        
+        匹配策略：
+        1. 第一级（严格）：名称精确匹配 + 年份 + 地区 + 导演，如果只有1个结果就返回
+        2. 第二级（宽松）：如果第一级结果为0，则使用名称相似度/包含关系，年份和导演必须非空且匹配，地区可选
         
         Args:
             search_results: 豆瓣搜索结果列表
             target_name: 目标视频名称
             target_year: 目标视频年份
             target_area: 目标视频地区（可选）
+            target_director: 目标视频导演（可选）
             
         Returns:
             匹配的搜索结果，None表示未匹配
@@ -322,7 +430,8 @@ class DataProcessor:
         if not search_results:
             return None
         
-        matched_videos = []
+        # ========== 第一级匹配：严格模式（名称精确匹配 + 年份 + 地区 + 导演）==========
+        strict_matched = []
         
         for result in search_results:
             result_name = result.get('title', '')
@@ -331,50 +440,160 @@ class DataProcessor:
             if not result_name:
                 continue
             
-            # 检查名称是否精确匹配（去除所有空格后比较）
+            # 严格模式：只检查精确匹配（去除所有空格后比较）
             normalized_target = DataProcessor.normalize_name(target_name)
             normalized_result = DataProcessor.normalize_name(result_name)
-            name_match = normalized_target == normalized_result
+            exact_match = normalized_target == normalized_result
             
             # 检查年份是否匹配
-            year_match = False
-            if target_year and target_year.strip():
-                # 提取纯数字年份
-                target_years = re.findall(r'\d{4}', target_year.strip())
-                result_years = re.findall(r'\d{4}', result_year.strip())
-                
-                if target_years and result_years:
-                    if len(target_years) == 1:
-                        year_match = target_years[0] in result_years
-                    else:
-                        year_match = bool(set(target_years) & set(result_years))
-                else:
-                    year_match = target_year.strip() == result_year.strip()
-            else:
-                # 如果没有年份信息，只匹配名称
-                year_match = True
+            year_match = DataProcessor._check_year_match(target_year, result_year)
             
-            # 检查地区是否匹配（如果提供了地区信息）
-            area_match = True
-            if target_area and target_area.strip():
-                # 从结果中提取地区信息（如果有）
-                result_area = result.get('country', '') or result.get('area', '')
-                if result_area:
-                    # 检查目标地区是否在结果地区中
-                    area_match = target_area.strip() in result_area or result_area in target_area.strip()
-                else:
-                    # 如果结果中没有地区信息，则跳过地区匹配
-                    area_match = True
+            # 检查地区是否匹配（如果提供了地区信息）- 使用包含关系
+            area_match = DataProcessor._check_area_match(target_area, result)
             
-            if name_match and year_match and area_match:
-                matched_videos.append(result)
+            # 检查导演是否匹配（如果提供了导演信息）
+            director_match = DataProcessor._check_director_match(target_director, result)
+            
+            # 第一级：名称精确匹配 + 其他字段匹配
+            if exact_match and year_match and area_match and director_match:
+                strict_matched.append(result)
         
-        if len(matched_videos) == 1:
-            return matched_videos[0]
-        elif len(matched_videos) > 1:
+        # 如果严格匹配只有1个结果，直接返回
+        if len(strict_matched) == 1:
+            return strict_matched[0]
+        elif len(strict_matched) > 1:
             return 'multiple'
+        
+        # ========== 第二级匹配：宽松模式（名称相似度/包含关系 + 年份/地区/导演必须非空且匹配）==========
+        # 只有当严格匹配结果为0时，才进入宽松模式
+        if len(strict_matched) == 0:
+            loose_matched = []
+            
+            for result in search_results:
+                result_name = result.get('title', '')
+                result_year = str(result.get('year', ''))
+                
+                if not result_name:
+                    continue
+                
+                # 宽松模式：名称使用包含关系或相似度
+                containment_match = DataProcessor.check_name_containment(target_name, result_name)
+                similarity = DataProcessor.calculate_similarity(target_name, result_name)
+                similarity_match = similarity >= 0.7  # 提高阈值到0.7
+                
+                # 名称匹配：包含关系 OR 相似度达标
+                loose_name_match = containment_match or similarity_match
+                
+                # 关键：年份、导演必须非空且匹配，地区可选
+                # 检查年份是否非空且匹配
+                if not target_year or not target_year.strip():
+                    continue  # 年份为空，跳过
+                year_match = DataProcessor._check_year_match(target_year, result_year)
+                if not year_match:
+                    continue
+                
+                # 检查地区是否匹配（如果提供了地区信息）- 地区可以为空
+                area_match = DataProcessor._check_area_match(target_area, result)
+                if not area_match:
+                    continue
+                
+                # 检查导演是否非空且匹配
+                if not target_director or not target_director.strip():
+                    continue  # 导演为空，跳过
+                director_match = DataProcessor._check_director_match(target_director, result)
+                if not director_match:
+                    continue
+                
+                # 第二级：名称可以宽松，但年份、地区、导演必须非空且匹配
+                if loose_name_match:
+                    loose_matched.append(result)
+            
+            # 处理宽松匹配结果
+            if len(loose_matched) == 1:
+                return loose_matched[0]
+            elif len(loose_matched) > 1:
+                return 'multiple'  # 多个结果返回'multiple'
+        
+        return None
+    
+    @staticmethod
+    def _check_year_match(target_year: str, result_year: str) -> bool:
+        """
+        检查年份是否匹配
+        
+        Args:
+            target_year: 目标年份
+            result_year: 结果年份
+            
+        Returns:
+            是否匹配
+        """
+        import re
+        
+        if not target_year or not target_year.strip():
+            return True  # 没有年份信息，跳过匹配
+        
+        # 提取纯数字年份
+        target_years = re.findall(r'\d{4}', target_year.strip())
+        result_years = re.findall(r'\d{4}', result_year.strip())
+        
+        if target_years and result_years:
+            if len(target_years) == 1:
+                return target_years[0] in result_years
+            else:
+                return bool(set(target_years) & set(result_years))
         else:
-            return None
+            return target_year.strip() == result_year.strip()
+    
+    @staticmethod
+    def _check_area_match(target_area: str, result: Dict) -> bool:
+        """
+        检查地区是否匹配
+        
+        Args:
+            target_area: 目标地区
+            result: 搜索结果
+            
+        Returns:
+            是否匹配
+        """
+        if not target_area or not target_area.strip():
+            return True  # 没有地区信息，跳过匹配
+        
+        # 从结果中提取地区信息
+        result_area = result.get('country', '') or result.get('area', '')
+        if result_area:
+            # 使用包含关系匹配
+            return target_area.strip() in result_area or result_area in target_area.strip()
+        else:
+            return True  # 结果中没有地区信息，跳过匹配
+    
+    @staticmethod
+    def _check_director_match(target_director: str, result: Dict) -> bool:
+        """
+        检查导演是否匹配
+        
+        Args:
+            target_director: 目标导演
+            result: 搜索结果
+            
+        Returns:
+            是否匹配
+        """
+        if not target_director or not target_director.strip():
+            return True  # 没有导演信息，跳过匹配
+        
+        # 从结果中提取导演信息
+        result_directors = []
+        if 'directors' in result and isinstance(result['directors'], list):
+            result_directors = [d.get('name', '') for d in result['directors'] if d.get('name')]
+        
+        if result_directors:
+            # 使用包含关系匹配
+            return any(target_director.strip() in director or director in target_director.strip() 
+                       for director in result_directors)
+        else:
+            return True  # 结果中没有导演信息，跳过匹配
     
     @staticmethod
     def prepare_db_info_from_douban(douban_info: Dict) -> Dict:
