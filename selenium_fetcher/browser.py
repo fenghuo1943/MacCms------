@@ -65,6 +65,10 @@ class BrowserManager:
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option('useAutomationExtension', False)
         
+        # 禁用日志输出
+        options.add_argument('--log-level=3')  # 只显示致命错误
+        options.add_argument('--silent')       # 静默模式
+        
         # 设置窗口大小
         options.add_argument(
             f'--window-size={self.config["window_size"][0]},{self.config["window_size"][1]}'
@@ -107,6 +111,10 @@ class BrowserManager:
         options.add_argument('--disable-blink-features=AutomationControlled')
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option('useAutomationExtension', False)
+        
+        # 禁用日志输出
+        options.add_argument('--log-level=3')  # 只显示致命错误
+        options.add_argument('--silent')       # 静默模式
         
         # 设置窗口大小
         options.add_argument(
