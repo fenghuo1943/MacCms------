@@ -250,7 +250,7 @@ class SeleniumDoubanFetcher:
                 msg += f" 片长:{info['duration']}分钟"
             
             # 使用主程序的logger输出成功信息（可选）
-            # main_logger.info(f"✓ ID:{vod_id} {vod_name} - {msg}")
+            main_logger.info(f"✓ ID:{vod_id} {vod_name} - {msg}")
             
             return (vod_id, True, msg)
             
