@@ -407,13 +407,14 @@ class DataProcessor:
         return False
     
     @staticmethod
-    def match_douban_search_results(search_results: List[Dict], target_name: str, target_year: str, target_area: str = '', target_director: str = '') -> Optional[Dict]:
+    def match_douban_search_results(search_results: List[Dict], target_name: str, target_year: str, target_area: str = '', target_director: str = '', api_client=None) -> Optional[Dict]:
         """
-        从豆瓣搜索结果中匹配目标视频（增强版：分级匹配策略）
+        从豆瓣搜索结果中匹配目标视频（增强版：分级匹配策略 + 多结果二次确认）
         
         匹配策略：
         1. 第一级（严格）：名称精确匹配 + 年份 + 地区 + 导演，如果只有1个结果就返回
         2. 第二级（宽松）：如果第一级结果为0，则使用名称相似度/包含关系，年份和导演必须非空且匹配，地区可选
+        3. 第三级（多结果二次确认）：如果匹配到多个结果，通过Subject API获取详细信息后重新匹配
         
         Args:
             search_results: 豆瓣搜索结果列表
@@ -421,9 +422,10 @@ class DataProcessor:
             target_year: 目标视频年份
             target_area: 目标视频地区（可选）
             target_director: 目标视频导演（可选）
+            api_client: API客户端实例（用于获取Subject详情，可选）
             
         Returns:
-            匹配的搜索结果，None表示未匹配
+            匹配的搜索结果，'multiple'表示多个结果，None表示未匹配
         """
         import re
         
@@ -462,7 +464,14 @@ class DataProcessor:
         if len(strict_matched) == 1:
             return strict_matched[0]
         elif len(strict_matched) > 1:
-            return 'multiple'
+            # 多个结果，进入第三级：通过Subject API获取详细信息后重新匹配
+            if api_client:
+                refined_result = DataProcessor._refine_multiple_matches(
+                    strict_matched, target_name, target_year, target_area, target_director, api_client
+                )
+                return refined_result
+            else:
+                return 'multiple'
         
         # ========== 第二级匹配：宽松模式（名称相似度/包含关系 + 年份/地区/导演必须非空且匹配）==========
         # 只有当严格匹配结果为0时，才进入宽松模式
@@ -512,7 +521,14 @@ class DataProcessor:
             if len(loose_matched) == 1:
                 return loose_matched[0]
             elif len(loose_matched) > 1:
-                return 'multiple'  # 多个结果返回'multiple'
+                # 多个结果，进入第三级：通过Subject API获取详细信息后重新匹配
+                if api_client:
+                    refined_result = DataProcessor._refine_multiple_matches(
+                        loose_matched, target_name, target_year, target_area, target_director, api_client
+                    )
+                    return refined_result
+                else:
+                    return 'multiple'  # 多个结果返回'multiple'
         
         return None
     
@@ -546,9 +562,71 @@ class DataProcessor:
             return target_year.strip() == result_year.strip()
     
     @staticmethod
+    def _normalize_area(area: str) -> str:
+        """
+        标准化地区名称，处理常见别名
+        
+        Args:
+            area: 原始地区名称
+            
+        Returns:
+            标准化后的地区名称
+        """
+        if not area:
+            return ''
+        
+        area = area.strip()
+        
+        # 地区别名映射表
+        area_aliases = {
+            '大陆': '中国大陆',
+            '中国': '中国大陆',
+            '内地': '中国大陆',
+            'CN': '中国大陆',
+            'USA': '美国',
+            'US': '美国',
+            'United States': '美国',
+            'United Kingdom': '英国',
+            'UK': '英国',
+            'Britain': '英国',
+            'Japan': '日本',
+            'JP': '日本',
+            'Korea': '韩国',
+            'South Korea': '韩国',
+            'KR': '韩国',
+            'France': '法国',
+            'FR': '法国',
+            'Germany': '德国',
+            'DE': '德国',
+            'Canada': '加拿大',
+            'CA': '加拿大',
+            'Australia': '澳大利亚',
+            'AU': '澳大利亚',
+            'India': '印度',
+            'IN': '印度',
+            'Thailand': '泰国',
+            'TH': '泰国',
+            'Taiwan': '中国台湾',
+            'TW': '中国台湾',
+            '台湾': '中国台湾',
+            'Hong Kong': '中国香港',
+            'HK': '中国香港',
+            '香港': '中国香港',
+            'Macau': '中国澳门',
+            'MO': '中国澳门',
+            '澳门': '中国澳门',
+        }
+        
+        # 检查是否是已知别名
+        if area in area_aliases:
+            return area_aliases[area]
+        
+        return area
+    
+    @staticmethod
     def _check_area_match(target_area: str, result: Dict) -> bool:
         """
-        检查地区是否匹配
+        检查地区是否匹配（支持别名匹配）
         
         Args:
             target_area: 目标地区
@@ -560,11 +638,28 @@ class DataProcessor:
         if not target_area or not target_area.strip():
             return True  # 没有地区信息，跳过匹配
         
+        # 标准化目标地区
+        normalized_target = DataProcessor._normalize_area(target_area)
+        
         # 从结果中提取地区信息
         result_area = result.get('country', '') or result.get('area', '')
         if result_area:
-            # 使用包含关系匹配
-            return target_area.strip() in result_area or result_area in target_area.strip()
+            # 标准化结果地区
+            normalized_result = DataProcessor._normalize_area(result_area)
+            
+            # 1. 精确匹配（标准化后）
+            if normalized_target == normalized_result:
+                return True
+            
+            # 2. 包含关系匹配（原始值）
+            if target_area.strip() in result_area or result_area in target_area.strip():
+                return True
+            
+            # 3. 标准化后的包含关系
+            if normalized_target in normalized_result or normalized_result in normalized_target:
+                return True
+            
+            return False
         else:
             return True  # 结果中没有地区信息，跳过匹配
     
@@ -594,6 +689,148 @@ class DataProcessor:
                        for director in result_directors)
         else:
             return True  # 结果中没有导演信息，跳过匹配
+    
+    @staticmethod
+    def _refine_multiple_matches(candidates: List[Dict], target_name: str, target_year: str, 
+                                  target_area: str, target_director: str, api_client) -> Optional[Dict]:
+        """
+        对多个候选结果进行二次确认：通过Subject API获取详细信息后重新匹配
+        
+        Args:
+            candidates: 候选结果列表
+            target_name: 目标视频名称
+            target_year: 目标视频年份
+            target_area: 目标视频地区
+            target_director: 目标视频导演
+            api_client: API客户端实例
+            
+        Returns:
+            匹配的结果，'multiple'表示仍然多个，None表示未匹配
+        """
+        from .config import logger
+        import re
+        
+        logger.info(f"检测到 {len(candidates)} 个候选结果，开始通过Subject API进行二次确认...")
+        
+        refined_candidates = []
+        
+        for idx, candidate in enumerate(candidates, 1):
+            douban_id = candidate.get('id', '')
+            if not douban_id:
+                continue
+            
+            try:
+                logger.info(f"  [{idx}/{len(candidates)}] 获取豆瓣ID {douban_id} 的详细信息...")
+                
+                # 通过Subject API获取详细信息
+                subject_data = api_client.get_douban_subject(douban_id)
+                
+                if not subject_data:
+                    logger.warning(f"  无法获取豆瓣ID {douban_id} 的详细信息，跳过")
+                    continue
+                
+                # 提取详细信息
+                title = subject_data.get('title', '')
+                original_title = subject_data.get('original_title', '')
+                year = str(subject_data.get('year', ''))
+                
+                # 提取导演信息
+                directors = []
+                if 'directors' in subject_data and isinstance(subject_data['directors'], list):
+                    directors = [d.get('name', '') for d in subject_data['directors'] if d.get('name')]
+                
+                # 提取国家/地区信息
+                countries = []
+                if 'countries' in subject_data and isinstance(subject_data['countries'], list):
+                    countries = subject_data['countries']
+                
+                logger.info(f"    标题: {title}, 年份: {year}, 导演: {','.join(directors[:2])}, 地区: {','.join(countries[:2])}")
+                
+                # 构建增强的候选结果（包含更详细的信息）
+                enhanced_candidate = {
+                    **candidate,  # 保留原始搜索结果
+                    'title': title,  # 使用Subject API返回的准确标题
+                    'year': year,
+                    'directors_list': directors,
+                    'countries_list': countries,
+                }
+                
+                # 使用更精确的信息重新匹配
+                # 1. 名称匹配（优先使用原标题，如果没有则使用标题）
+                name_to_match = title if title else original_title
+                normalized_target = DataProcessor.normalize_name(target_name)
+                normalized_result = DataProcessor.normalize_name(name_to_match)
+                name_match = normalized_target == normalized_result
+                
+                # 如果精确匹配失败，尝试包含关系
+                if not name_match:
+                    name_match = DataProcessor.check_name_containment(target_name, name_to_match)
+                
+                # 2. 年份匹配
+                year_match = DataProcessor._check_year_match(target_year, year)
+                
+                # 3. 地区匹配（支持别名）
+                area_match = True
+                if target_area and target_area.strip():
+                    if countries:
+                        # 标准化目标地区
+                        normalized_target = DataProcessor._normalize_area(target_area)
+                        
+                        # 检查是否有任何国家匹配
+                        area_match = False
+                        for country in countries:
+                            # 标准化国家名称
+                            normalized_country = DataProcessor._normalize_area(country)
+                            
+                            # 1. 精确匹配（标准化后）
+                            if normalized_target == normalized_country:
+                                area_match = True
+                                break
+                            
+                            # 2. 包含关系匹配（原始值）
+                            if target_area.strip() in country or country in target_area.strip():
+                                area_match = True
+                                break
+                            
+                            # 3. 标准化后的包含关系
+                            if normalized_target in normalized_country or normalized_country in normalized_target:
+                                area_match = True
+                                break
+                    else:
+                        area_match = True  # 没有地区信息，跳过匹配
+                
+                # 4. 导演匹配
+                director_match = True
+                if target_director and target_director.strip():
+                    if directors:
+                        director_match = any(target_director.strip() in director or director in target_director.strip() 
+                                           for director in directors)
+                    else:
+                        director_match = True  # 没有导演信息，跳过匹配
+                
+                logger.info(f"    匹配结果: 名称={name_match}, 年份={year_match}, 地区={area_match}, 导演={director_match}")
+                
+                # 如果所有条件都匹配，加入精炼后的候选列表
+                if name_match and year_match and area_match and director_match:
+                    refined_candidates.append(enhanced_candidate)
+                    logger.info(f"    ✓ 匹配成功")
+                else:
+                    logger.info(f"    ✗ 匹配失败")
+                
+            except Exception as e:
+                logger.error(f"  处理候选结果 {idx} 时出错: {str(e)}")
+                continue
+        
+        # 根据精炼后的结果返回
+        if len(refined_candidates) == 1:
+            logger.info(f"二次确认完成：精确匹配到 1 个结果")
+            return refined_candidates[0]
+        elif len(refined_candidates) > 1:
+            logger.warning(f"二次确认完成：仍然匹配到 {len(refined_candidates)} 个结果")
+            return 'multiple'
+        else:
+            logger.warning(f"二次确认完成：未找到匹配结果")
+            return None
     
     @staticmethod
     def prepare_db_info_from_douban(douban_info: Dict) -> Dict:

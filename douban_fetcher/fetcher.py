@@ -49,6 +49,39 @@ class DoubanScoreFetcher:
         # 添加连续无结果计数器
         self.consecutive_no_results = 0
         self.max_consecutive_no_results = 20  # 连续无结果阈值
+        
+        # 停止标志
+        self.stop_requested = False
+        self.stop_flag_file = "stop.flag"
+    
+    def check_stop_condition(self) -> bool:
+        """
+        检查是否需要停止
+        
+        Returns:
+            True 如果应该停止，False 否则
+        """
+        # 如果已经请求停止，直接返回True（避免重复检查）
+        if self.stop_requested:
+            return True
+        
+        # 检查停止文件是否存在
+        if os.path.exists(self.stop_flag_file):
+            logger.info(f"检测到停止文件: {self.stop_flag_file}")
+            # 设置停止标志（这样后续检查就不会再进入这个分支）
+            self.stop_requested = True
+            try:
+                # 重命名文件而不是删除，保留停止记录
+                import time
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                backup_file = f"stop_{timestamp}.flag"
+                os.rename(self.stop_flag_file, backup_file)
+                logger.info(f"已将停止文件重命名为: {backup_file}")
+            except Exception as e:
+                logger.warning(f"重命名停止文件失败: {e}")
+            return True
+        
+        return False
     
     def load_stats(self):
         """加载统计信息（断点续传）"""
@@ -106,8 +139,10 @@ class DoubanScoreFetcher:
             # 有结果，重置连续无结果计数
             self.consecutive_no_results = 0
             
-            # 2. 匹配视频（传入地区信息和导演信息）
-            matched = DataProcessor.match_douban_search_results(search_results, vod_name, vod_year, vod_area, vod_director)
+            # 2. 匹配视频（传入地区信息、导演信息和api_client）
+            matched = DataProcessor.match_douban_search_results(
+                search_results, vod_name, vod_year, vod_area, vod_director, self.api_client
+            )
             
             if matched == 'multiple':
                 # 多个结果
@@ -193,6 +228,11 @@ class DoubanScoreFetcher:
         start_time = time.time()
         
         while True:
+            # 检查停止条件
+            if self.check_stop_condition():
+                logger.info("用户请求停止任务")
+                break
+            
             # 使用原子锁定机制获取视频
             videos = self.db.lock_videos_atomically(self.worker_id, limit=batch_size)
             
@@ -217,6 +257,11 @@ class DoubanScoreFetcher:
             batch_failures = 0  # 记录本批次失败数
             
             for i, video in enumerate(videos, 1):
+                # 在处理每个视频前检查停止条件
+                if self.check_stop_condition():
+                    logger.info(f"在处理第 {i}/{len(videos)} 个视频时收到停止请求")
+                    break
+                
                 vod_id, success, msg = self.process_single_video(video)
                 
                 if success:
@@ -243,6 +288,15 @@ class DoubanScoreFetcher:
                 self.stats['total_processed'] = total_processed
                 self.stats['total_success'] = total_success
                 self.save_stats()
+                
+                # 如果已经请求停止，退出循环
+                if self.check_stop_condition():
+                    logger.info(f"已处理 {i}/{len(videos)} 个视频后停止")
+                    break
+            
+            # 如果是因停止请求而退出内层循环，则也退出外层循环
+            if self.check_stop_condition():
+                break
             
             batch_elapsed = time.time() - batch_start
             logger.info(f"批次完成: {len(videos)}个, 成功{batch_success}个, "
@@ -284,11 +338,14 @@ class DoubanScoreFetcher:
         
         total_elapsed = time.time() - start_time
         logger.info("\n" + "=" * 70)
-        logger.info("任务完成！")
+        if self.stop_requested or os.path.exists(self.stop_flag_file):
+            logger.info("任务已优雅停止！")
+        else:
+            logger.info("任务完成！")
         logger.info(f"总处理: {total_processed} 个")
-        logger.info(f"成功: {total_success} 个 ({total_success/total_processed*100:.1f}%)")
+        logger.info(f"成功: {total_success} 个 ({total_success/total_processed*100:.1f}%)" if total_processed > 0 else "成功: 0 个")
         logger.info(f"总耗时: {self.format_eta(total_elapsed)}")
-        logger.info(f"平均速度: {total_processed/total_elapsed:.2f} 个/秒")
+        logger.info(f"平均速度: {total_processed/total_elapsed:.2f} 个/秒" if total_elapsed > 0 else "平均速度: 0 个/秒")
         logger.info("=" * 70)
         
         self.generate_report(total_processed, total_success, total_elapsed)
