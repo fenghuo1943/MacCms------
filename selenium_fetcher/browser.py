@@ -18,9 +18,13 @@ class BrowserManager:
         初始化浏览器管理器
         
         Args:
-            config: Selenium配置字典
+            config: Selenium配置字典（会与默认配置合并）
         """
-        self.config = config or SELENIUM_CONFIG.copy()
+        # 合并配置：默认配置 + 用户配置
+        from .config import SELENIUM_CONFIG
+        self.config = SELENIUM_CONFIG.copy()
+        if config:
+            self.config.update(config)
         self.driver = None
         self.wait = None
     
