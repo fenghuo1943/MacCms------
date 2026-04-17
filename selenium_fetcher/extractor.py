@@ -189,6 +189,21 @@ class DoubanPageExtractor:
             else:
                 info['language'] = ''
             
+            # 别名/又名
+            alias_span = info_div.find('span', class_='pl', 
+                                      string=lambda text: text and ('又名' in text or '别名' in text))
+            if alias_span:
+                next_text = alias_span.next_sibling
+                if next_text:
+                    alias_text = next_text.strip()
+                    # 清理末尾的 <br> 标签
+                    alias_text = alias_text.replace('<br>', '').replace('<br/>', '').strip()
+                    info['alias'] = alias_text
+                else:
+                    info['alias'] = ''
+            else:
+                info['alias'] = ''
+            
             # 首播/上映时间
             release_span = info_div.find('span', property='v:initialReleaseDate')
             if release_span:
