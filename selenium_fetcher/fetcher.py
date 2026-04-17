@@ -138,11 +138,11 @@ class SeleniumDoubanFetcher:
                 html_content = driver.page_source
                 
                 # 检查是否被拦截
-                if 'sec' in html_content and 'tok' in html_content:
+                """ if 'sec' in html_content and 'tok' in html_content:
                     logger.warning("检测到豆瓣反爬虫验证，等待后重试...")
                     wait_time = RETRY_CONFIG['base_delay'] * (2 ** attempt)
                     time.sleep(min(wait_time, RETRY_CONFIG['max_delay']))
-                    continue
+                    continue """
                 
                 # 提取详细信息
                 movie_info = self.extractor.extract_movie_info(html_content)

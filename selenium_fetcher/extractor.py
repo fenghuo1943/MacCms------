@@ -108,11 +108,26 @@ class DoubanPageExtractor:
         
         # 3. 提取评分
         rating_tag = soup.find('strong', class_='ll rating_num', property='v:average')
-        info['rating'] = float(rating_tag.get_text().strip()) if rating_tag else 0.0
+        if rating_tag:
+            rating_text = rating_tag.get_text().strip()
+            # 处理空评分或"暂无评分"的情况
+            try:
+                info['rating'] = float(rating_text) if rating_text else 0.0
+            except ValueError:
+                info['rating'] = 0.0
+        else:
+            info['rating'] = 0.0
         
         # 4. 提取评分人数
         votes_tag = soup.find('span', property='v:votes')
-        info['votes'] = int(votes_tag.get_text().strip()) if votes_tag else 0
+        if votes_tag:
+            votes_text = votes_tag.get_text().strip()
+            try:
+                info['votes'] = int(votes_text) if votes_text else 0
+            except ValueError:
+                info['votes'] = 0
+        else:
+            info['votes'] = 0
         
         # 5. 提取详细信息（从 #info div）
         info_div = soup.find('div', id='info')
