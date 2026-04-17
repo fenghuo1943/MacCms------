@@ -184,6 +184,7 @@ class SeleniumDoubanFetcher:
                 self.consecutive_no_results += 1
                 logger.warning(f"连续无结果次数: {self.consecutive_no_results}/{self.max_consecutive_no_results}")
                 self.db.update_video_score(vod_id, {}, FetchStatus.NO_SEARCH_RESULT)
+                logger.warning(f"无搜索结果: {vod_name}")
                 return (vod_id, False, "无搜索结果")
             
             # 有结果，重置连续无结果计数
@@ -194,10 +195,12 @@ class SeleniumDoubanFetcher:
             
             if matched == 'multiple':
                 self.db.update_video_score(vod_id, {}, FetchStatus.MULTIPLE_RESULTS)
+                logger.warning(f"匹配到多个结果: {vod_name}")
                 return (vod_id, False, "匹配到多个结果")
             
             if matched is None:
                 self.db.update_video_score(vod_id, {}, FetchStatus.NO_MATCH_RESULT)
+                logger.warning(f"未找到匹配结果: {vod_name}")
                 return (vod_id, False, "未找到匹配")
             
             # 3. 获取豆瓣ID

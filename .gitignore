@@ -95,9 +95,11 @@ desktop.ini
 .env.local
 .env.*.local
 
-# 配置文件（如果包含敏感信息，如数据库密码）
-# config.py
-# .config/
+# 配置文件（包含敏感信息，如数据库密码）
+*config.py
+!.gitignore
+# 保留示例配置文件
+!*example*.py
 
 # 文档生成
 docs/_build/
