@@ -75,6 +75,7 @@ class DoubanScoreFetcher:
         vod_id = video['vod_id']
         vod_name = video['vod_name']
         vod_year = video.get('vod_year', '')
+        vod_area = video.get('vod_area', '')
         
         try:
             # 速率限制
@@ -93,14 +94,14 @@ class DoubanScoreFetcher:
                 # 无结果 - 增加连续无结果计数
                 self.consecutive_no_results += 1
                 logger.warning(f"连续无结果次数: {self.consecutive_no_results}/{self.max_consecutive_no_results}")
-                self.db.update_video_score(vod_id, {}, FetchStatus.NO_RESULT)
+                self.db.update_video_score(vod_id, {}, FetchStatus.NO_SEARCH_RESULT)
                 return (vod_id, False, "无搜索结果")
             
             # 有结果，重置连续无结果计数
             self.consecutive_no_results = 0
             
-            # 2. 匹配视频
-            matched = DataProcessor.match_douban_search_results(search_results, vod_name, vod_year)
+            # 2. 匹配视频（传入地区信息）
+            matched = DataProcessor.match_douban_search_results(search_results, vod_name, vod_year, vod_area)
             
             if matched == 'multiple':
                 # 多个结果
@@ -108,8 +109,8 @@ class DoubanScoreFetcher:
                 return (vod_id, False, "匹配到多个结果")
             
             if matched is None:
-                # 无匹配
-                self.db.update_video_score(vod_id, {}, FetchStatus.NO_RESULT)
+                # 无匹配（有搜索结果但无法精确匹配）
+                self.db.update_video_score(vod_id, {}, FetchStatus.NO_MATCH_RESULT)
                 return (vod_id, False, "未找到匹配")
             
             # 3. 获取豆瓣ID

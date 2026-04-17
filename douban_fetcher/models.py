@@ -9,7 +9,8 @@ class FetchStatus:
     NOT_FETCHED = 1           # 未获取
     SUCCESS = 0               # 获取成功
     MULTIPLE_RESULTS = 2      # 多个结果
-    NO_RESULT = 3             # 无结果
+    NO_SEARCH_RESULT = 3      # 搜索结果为空
+    NO_MATCH_RESULT = 6       # 匹配结果为空（有搜索结果但无匹配）
     ERROR = 4                 # 其他错误
     RATE_LIMITED = 5          # 被限流
     
@@ -17,9 +18,10 @@ class FetchStatus:
         0: '成功',
         1: '未处理',
         2: '多个结果',
-        3: '无结果',
+        3: '搜索结果为空',
         4: '错误',
-        5: '被限流'
+        5: '被限流',
+        6: '匹配结果为空'
     }
 
 

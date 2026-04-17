@@ -29,6 +29,24 @@ class DataProcessor:
         return ','.join(names[:10]) if names else ''  # 只取前10个
     
     @staticmethod
+    def normalize_name(name: str) -> str:
+        """
+        标准化视频名称：去除所有空格和特殊字符
+        
+        Args:
+            name: 原始视频名称
+            
+        Returns:
+            标准化后的名称
+        """
+        if not name:
+            return ''
+        # 去除所有空格、制表符、换行符等空白字符
+        import re
+        normalized = re.sub(r'\s+', '', name.strip())
+        return normalized
+    
+    @staticmethod
     def match_video(search_results: List[Dict], target_name: str, target_year: str):
         """
         从搜索结果中匹配目标视频
@@ -72,8 +90,10 @@ class DataProcessor:
             if not result_name:
                 continue
             
-            # 检查名称是否精确匹配
-            name_match = target_name.strip() == result_name.strip()
+            # 检查名称是否精确匹配（去除所有空格后比较）
+            normalized_target = DataProcessor.normalize_name(target_name)
+            normalized_result = DataProcessor.normalize_name(result_name)
+            name_match = normalized_target == normalized_result
             
             # 检查年份是否匹配
             year_match = False
@@ -284,7 +304,7 @@ class DataProcessor:
         return info
     
     @staticmethod
-    def match_douban_search_results(search_results: List[Dict], target_name: str, target_year: str) -> Optional[Dict]:
+    def match_douban_search_results(search_results: List[Dict], target_name: str, target_year: str, target_area: str = '') -> Optional[Dict]:
         """
         从豆瓣搜索结果中匹配目标视频
         
@@ -292,6 +312,7 @@ class DataProcessor:
             search_results: 豆瓣搜索结果列表
             target_name: 目标视频名称
             target_year: 目标视频年份
+            target_area: 目标视频地区（可选）
             
         Returns:
             匹配的搜索结果，None表示未匹配
@@ -310,8 +331,10 @@ class DataProcessor:
             if not result_name:
                 continue
             
-            # 检查名称是否精确匹配
-            name_match = target_name.strip() == result_name.strip()
+            # 检查名称是否精确匹配（去除所有空格后比较）
+            normalized_target = DataProcessor.normalize_name(target_name)
+            normalized_result = DataProcessor.normalize_name(result_name)
+            name_match = normalized_target == normalized_result
             
             # 检查年份是否匹配
             year_match = False
@@ -331,7 +354,19 @@ class DataProcessor:
                 # 如果没有年份信息，只匹配名称
                 year_match = True
             
-            if name_match and year_match:
+            # 检查地区是否匹配（如果提供了地区信息）
+            area_match = True
+            if target_area and target_area.strip():
+                # 从结果中提取地区信息（如果有）
+                result_area = result.get('country', '') or result.get('area', '')
+                if result_area:
+                    # 检查目标地区是否在结果地区中
+                    area_match = target_area.strip() in result_area or result_area in target_area.strip()
+                else:
+                    # 如果结果中没有地区信息，则跳过地区匹配
+                    area_match = True
+            
+            if name_match and year_match and area_match:
                 matched_videos.append(result)
         
         if len(matched_videos) == 1:

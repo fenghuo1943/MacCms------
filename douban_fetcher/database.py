@@ -43,7 +43,7 @@ class DatabaseManager:
         try:
             with conn.cursor() as cursor:
                 sql = """
-                    SELECT vod_id, vod_name, vod_year 
+                    SELECT vod_id, vod_name, vod_year, vod_area
                     FROM mac_vod 
                     WHERE vod_fetch_status = %s 
                     ORDER BY vod_id ASC

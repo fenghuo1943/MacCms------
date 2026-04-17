@@ -44,8 +44,8 @@ RETRY_CONFIG = {
 
 # 数据库配置示例（与主项目保持一致）
 DB_CONFIG_EXAMPLE = {
-    'host': '192.168.114.4',
-    'port': 3307,
+    'host': 'mylove.fenghuo1943.cn',
+    'port': 13307,
     'user': 'maccms',
     'password': 'q5DdyjsI5%GJOr',
     'database': 'maccms',
