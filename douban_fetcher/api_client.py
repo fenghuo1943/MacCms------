@@ -18,6 +18,10 @@ class ApiClient:
         
         self.session = requests.Session()
         self.session.headers.update(API_CONFIG['headers'])
+        
+        # 添加连续失败计数器，用于检测API是否被限制
+        self.consecutive_failures = 0
+        self.max_consecutive_failures = 10  # 最大连续失败次数
     
     def get_next_proxy(self) -> Optional[str]:
         """获取下一个代理"""
@@ -161,14 +165,20 @@ class ApiClient:
                     logger.warning(f"豆瓣搜索API返回格式异常")
                     if monitor:
                         monitor.record_request(False)
+                    # 增加连续失败计数
+                    self.consecutive_failures += 1
                     return None
                 
                 subjects = result.get('subjects', [])
                 if not isinstance(subjects, list):
                     if monitor:
                         monitor.record_request(False)
+                    # 增加连续失败计数
+                    self.consecutive_failures += 1
                     return None
                 
+                # 如果成功，重置连续失败计数
+                self.consecutive_failures = 0
                 if monitor:
                     monitor.record_request(True)
                 return subjects
@@ -177,6 +187,8 @@ class ApiClient:
                 logger.warning(f"豆瓣搜索API请求超时 (尝试 {attempt + 1}/{max_retries})")
                 if monitor:
                     monitor.record_request(False)
+                # 增加连续失败计数
+                self.consecutive_failures += 1
                 if attempt < max_retries - 1:
                     time.sleep(base_delay * (2 ** attempt))
                     continue
@@ -186,6 +198,8 @@ class ApiClient:
                 logger.warning(f"豆瓣搜索API连接错误 (尝试 {attempt + 1}/{max_retries}): {str(e)[:100]}")
                 if monitor:
                     monitor.record_request(False)
+                # 增加连续失败计数
+                self.consecutive_failures += 1
                 if attempt < max_retries - 1:
                     time.sleep(base_delay * (2 ** attempt))
                     continue
@@ -195,6 +209,8 @@ class ApiClient:
                 logger.error(f"豆瓣搜索API请求异常: {video_name}, 错误: {str(e)[:100]}")
                 if monitor:
                     monitor.record_request(False)
+                # 增加连续失败计数
+                self.consecutive_failures += 1
                 return None
         
         return None
@@ -215,6 +231,8 @@ class ApiClient:
             logger.warning("豆瓣ID为空")
             if monitor:
                 monitor.record_request(False)
+            # 增加连续失败计数
+            self.consecutive_failures += 1
             return None
         
         url = f"{DOUBAN_API_CONFIG['subject_base_url']}{douban_id}"
@@ -252,8 +270,12 @@ class ApiClient:
                     logger.warning(f"豆瓣Subject API返回格式异常")
                     if monitor:
                         monitor.record_request(False)
+                    # 增加连续失败计数
+                    self.consecutive_failures += 1
                     return None
                 
+                # 如果成功，重置连续失败计数
+                self.consecutive_failures = 0
                 if monitor:
                     monitor.record_request(True)
                 return data
@@ -262,6 +284,8 @@ class ApiClient:
                 logger.warning(f"豆瓣Subject API请求超时 (尝试 {attempt + 1}/{max_retries})")
                 if monitor:
                     monitor.record_request(False)
+                # 增加连续失败计数
+                self.consecutive_failures += 1
                 if attempt < max_retries - 1:
                     time.sleep(base_delay * (2 ** attempt))
                     continue
@@ -271,6 +295,8 @@ class ApiClient:
                 logger.warning(f"豆瓣Subject API连接错误 (尝试 {attempt + 1}/{max_retries}): {str(e)[:100]}")
                 if monitor:
                     monitor.record_request(False)
+                # 增加连续失败计数
+                self.consecutive_failures += 1
                 if attempt < max_retries - 1:
                     time.sleep(base_delay * (2 ** attempt))
                     continue
@@ -280,6 +306,8 @@ class ApiClient:
                 logger.error(f"豆瓣Subject API请求异常: {douban_id}, 错误: {str(e)[:100]}")
                 if monitor:
                     monitor.record_request(False)
+                # 增加连续失败计数
+                self.consecutive_failures += 1
                 return None
         
         return None

@@ -54,7 +54,7 @@ DB_CONFIG_EXAMPLE = {
 # 默认运行配置
 DEFAULT_RUN_CONFIG = {
     'batch_size': 50,
-    'max_requests_per_second': 2.0,
+    'max_requests_per_second': 0.5,
     'adjust_rate': True,
     'use_proxy': False,
     'proxy_list': [

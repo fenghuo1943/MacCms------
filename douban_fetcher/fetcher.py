@@ -40,6 +40,10 @@ class DoubanScoreFetcher:
         # 统计文件
         self.stats_file = STATS_FILE
         self.load_stats()
+        
+        # 添加连续无结果计数器
+        self.consecutive_no_results = 0
+        self.max_consecutive_no_results = 20  # 连续无结果阈值
     
     def load_stats(self):
         """加载统计信息（断点续传）"""
@@ -82,12 +86,18 @@ class DoubanScoreFetcher:
             if search_results is None:
                 # API请求失败
                 self.db.update_video_score(vod_id, {}, FetchStatus.ERROR)
+                # 增加连续失败计数（已经在api_client中处理）
                 return (vod_id, False, "豆瓣API请求失败")
             
             if len(search_results) == 0:
-                # 无结果
+                # 无结果 - 增加连续无结果计数
+                self.consecutive_no_results += 1
+                logger.warning(f"连续无结果次数: {self.consecutive_no_results}/{self.max_consecutive_no_results}")
                 self.db.update_video_score(vod_id, {}, FetchStatus.NO_RESULT)
                 return (vod_id, False, "无搜索结果")
+            
+            # 有结果，重置连续无结果计数
+            self.consecutive_no_results = 0
             
             # 2. 匹配视频
             matched = DataProcessor.match_douban_search_results(search_results, vod_name, vod_year)
@@ -191,6 +201,7 @@ class DoubanScoreFetcher:
             
             batch_start = time.time()
             batch_success = 0
+            batch_failures = 0  # 记录本批次失败数
             
             for i, video in enumerate(videos, 1):
                 vod_id, success, msg = self.process_single_video(video)
@@ -201,6 +212,7 @@ class DoubanScoreFetcher:
                     if i % 10 == 0 or i == len(videos):
                         logger.info(f"  [{i}/{len(videos)}] ✓ ID:{vod_id}")
                 else:
+                    batch_failures += 1
                     if i % 10 == 0 or i == len(videos):
                         logger.warning(f"  [{i}/{len(videos)}] ✗ ID:{vod_id} - {msg}")
                 
@@ -222,6 +234,28 @@ class DoubanScoreFetcher:
             batch_elapsed = time.time() - batch_start
             logger.info(f"批次完成: {len(videos)}个, 成功{batch_success}个, "
                        f"耗时{batch_elapsed:.1f}秒")
+            
+            # 检查连续失败次数，如果超过阈值则停止
+            if self.api_client.consecutive_failures >= self.api_client.max_consecutive_failures:
+                logger.warning(f"检测到连续失败次数达到阈值 ({self.api_client.consecutive_failures}), "
+                             f"可能API已被限制，自动停止任务")
+                logger.info(f"最后10次请求状态: {self.monitor.get_stats()}")
+                break
+            
+            # 检查连续无结果次数
+            if self.consecutive_no_results >= self.max_consecutive_no_results:
+                logger.warning(f"检测到连续无结果次数达到阈值 ({self.consecutive_no_results}), "
+                             f"可能API已被静默限制，自动停止任务")
+                logger.info(f"最后统计: {self.monitor.get_stats()}")
+                break
+            
+            # 如果整批都失败了，也考虑停止
+            if batch_failures == len(videos) and len(videos) > 0:
+                logger.warning(f"当前批次全部失败 ({len(videos)}个视频), 可能API已被限制")
+                # 再检查一次连续失败次数
+                if self.api_client.consecutive_failures >= 5:  # 降低阈值，更敏感
+                    logger.warning(f"连续失败次数: {self.api_client.consecutive_failures}, 自动停止任务")
+                    break
             
             if adjust_rate:
                 stats = self.monitor.get_stats()
