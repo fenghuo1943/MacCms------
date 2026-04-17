@@ -21,11 +21,11 @@ STATS_FILE = 'selenium_fetch_stats.json'
 
 # Selenium配置
 SELENIUM_CONFIG = {
-    'browser': 'chrome',  # 浏览器类型: chrome, firefox
+    'browser': 'edge',  # 浏览器类型: chrome, firefox, edge
     'headless': True,     # 是否无头模式
     'timeout': 30,        # 页面加载超时时间(秒)
     'implicit_wait': 10,  # 隐式等待时间(秒)
-    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
     'window_size': (1920, 1080),  # 窗口大小
 }
 

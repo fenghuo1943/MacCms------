@@ -2,8 +2,9 @@
 Selenium浏览器驱动管理模块
 """
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
+from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.webdriver.support.ui import WebDriverWait
 from typing import Optional
 
@@ -35,6 +36,8 @@ class BrowserManager:
                 self._init_chrome()
             elif self.config['browser'].lower() == 'firefox':
                 self._init_firefox()
+            elif self.config['browser'].lower() == 'edge':
+                self._init_edge()
             else:
                 raise ValueError(f"不支持的浏览器类型: {self.config['browser']}")
             
@@ -50,7 +53,7 @@ class BrowserManager:
     
     def _init_chrome(self):
         """初始化Chrome浏览器"""
-        options = Options()
+        options = ChromeOptions()
         
         if self.config['headless']:
             options.add_argument('--headless')
@@ -90,6 +93,39 @@ class BrowserManager:
         options.set_preference('useAutomationExtension', False)
         
         self.driver = webdriver.Firefox(options=options)
+    
+    def _init_edge(self):
+        """初始化Edge浏览器"""
+        options = EdgeOptions()
+        
+        if self.config['headless']:
+            options.add_argument('--headless')
+        
+        options.add_argument(f'user-agent={self.config["user_agent"]}')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
+        
+        # 设置窗口大小
+        options.add_argument(
+            f'--window-size={self.config["window_size"][0]},{self.config["window_size"][1]}'
+        )
+        
+        self.driver = webdriver.Edge(options=options)
+        
+        # 执行CDP命令来隐藏webdriver属性（Edge也支持）
+        try:
+            self.driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+                'source': '''
+                    Object.defineProperty(navigator, 'webdriver', {
+                        get: () => undefined
+                    })
+                '''
+            })
+        except Exception as e:
+            logger.warning(f"Edge CDP命令执行失败（非致命）: {str(e)}")
     
     def quit_driver(self):
         """关闭WebDriver"""
