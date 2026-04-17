@@ -225,6 +225,7 @@ class SeleniumDoubanFetcher:
                 'doubanLanguage': movie_info.get('language', ''),
                 'doubanReleaseDate': movie_info.get('release_date', ''),
                 'doubanEpisodes': movie_info.get('episodes', 0),
+                'doubanDuration': movie_info.get('duration', 0),  # 单集片长或电影片长（分钟）
                 'doubanSummary': movie_info.get('summary', ''),
                 'imdb_id': movie_info.get('imdb_id', ''),
             }
@@ -237,6 +238,8 @@ class SeleniumDoubanFetcher:
                 msg += f" 类型:{info['doubanGenre'][:30]}"
             if info.get('doubanEpisodes'):
                 msg += f" 集数:{info['doubanEpisodes']}"
+            if info.get('doubanDuration'):
+                msg += f" 片长:{info['doubanDuration']}分钟"
             return (vod_id, True, msg)
             
         except Exception as e:

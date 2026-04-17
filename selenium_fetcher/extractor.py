@@ -228,6 +228,30 @@ class DoubanPageExtractor:
             else:
                 info['episodes'] = 0
             
+            # 单集片长（电视剧）或片长（电影）
+            # 先尝试提取单集片长
+            episode_duration_span = info_div.find('span', class_='pl', 
+                                                  string=lambda text: text and '单集片长' in text)
+            if episode_duration_span:
+                next_text = episode_duration_span.next_sibling
+                if next_text:
+                    duration_text = next_text.strip()
+                    # 从 "45分钟" 中提取数字
+                    duration_match = re.search(r'(\d+)', duration_text)
+                    info['duration'] = int(duration_match.group(1)) if duration_match else 0
+                else:
+                    info['duration'] = 0
+            else:
+                # 如果没有单集片长，尝试提取电影片长
+                runtime_tag = info_div.find('span', property='v:runtime')
+                if runtime_tag:
+                    runtime_text = runtime_tag.get_text().strip()
+                    # 从 "103分钟" 中提取数字
+                    runtime_match = re.search(r'(\d+)', runtime_text)
+                    info['duration'] = int(runtime_match.group(1)) if runtime_match else 0
+                else:
+                    info['duration'] = 0
+            
             # IMDb ID
             imdb_span = info_div.find('span', class_='pl', 
                                      string=lambda text: text and 'IMDb' in text)
