@@ -95,7 +95,10 @@ class SeleniumDoubanFetcher:
                 douban_id = item.get('id', '')
                 title = item.get('title', '')
                 year = item.get('year', '')
-                director = item.get('directors', [{}])[0].get('name', '')
+                #director = item.get('directors', [{}])[0].get('name', '')
+                # 安全地获取导演信息
+                directors = item.get('directors', [])
+                director = directors[0].get('name', '') if directors and len(directors) > 0 else ''
                 
                 # 确定类型
                 subtype = item.get('subtype', '')
