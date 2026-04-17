@@ -41,7 +41,7 @@ class SeleniumDoubanFetcher:
         
         # 设备标识
         self.worker_id = get_worker_id()
-        logger.info(f"当前设备标识: {self.worker_id}")
+        main_logger.info(f"当前设备标识: {self.worker_id}")
         
         # 统计文件（每个设备独立的统计文件）
         self.stats_file = f"selenium_fetch_stats_{self.worker_id}.json"
@@ -57,7 +57,7 @@ class SeleniumDoubanFetcher:
             try:
                 with open(self.stats_file, 'r', encoding='utf-8') as f:
                     self.stats = json.load(f)
-                logger.info(f"加载历史统计: {self.stats}")
+                main_logger.info(f"加载历史统计: {self.stats}")
             except:
                 self.stats = {'start_time': None, 'total_processed': 0, 'total_success': 0}
         else:
@@ -79,13 +79,13 @@ class SeleniumDoubanFetcher:
             搜索结果列表，失败返回None
         """
         try:
-            logger.info(f"使用API搜索: {video_name}")
+            main_logger.info(f"使用API搜索: {video_name}")
             
             # 使用豆瓣API搜索
             search_results = self.api_client.search_douban(video_name)
             
             if search_results is None:
-                logger.warning("API搜索失败")
+                main_logger.warning("API搜索失败")
                 return None
             
             # 转换API结果为统一格式
@@ -109,11 +109,11 @@ class SeleniumDoubanFetcher:
                         'url': f'https://movie.douban.com/subject/{douban_id}/'
                     })
             
-            #logger.info(f"API搜索到 {len(results)} 个结果")
+            #main_logger.info(f"API搜索到 {len(results)} 个结果")
             return results
             
         except Exception as e:
-            logger.error(f"API搜索时出错: {str(e)}")
+            main_logger.error(f"API搜索时出错: {str(e)}")
             return None
     
     def get_movie_detail(self, douban_id: str) -> Optional[Dict]:
@@ -131,7 +131,7 @@ class SeleniumDoubanFetcher:
         for attempt in range(RETRY_CONFIG['max_retries']):
             try:
                 url = DOUBAN_MOVIE_URL.format(douban_id=douban_id)
-                #logger.info(f"正在获取详情: {douban_id} (尝试 {attempt + 1}/{RETRY_CONFIG['max_retries']})")
+                #main_logger.info(f"正在获取详情: {douban_id} (尝试 {attempt + 1}/{RETRY_CONFIG['max_retries']})")
                 
                 # 访问详情页
                 driver.get(url)
@@ -144,7 +144,7 @@ class SeleniumDoubanFetcher:
                 
                 # 检查是否被拦截
                 """ if 'sec' in html_content and 'tok' in html_content:
-                    logger.warning("检测到豆瓣反爬虫验证，等待后重试...")
+                    main_logger.warning("检测到豆瓣反爬虫验证，等待后重试...")
                     wait_time = RETRY_CONFIG['base_delay'] * (2 ** attempt)
                     time.sleep(min(wait_time, RETRY_CONFIG['max_delay']))
                     continue """
@@ -154,7 +154,7 @@ class SeleniumDoubanFetcher:
                 return movie_info
                 
             except Exception as e:
-                logger.error(f"获取详情时出错: {str(e)}")
+                main_logger.error(f"获取详情时出错: {str(e)}")
                 if attempt < RETRY_CONFIG['max_retries'] - 1:
                     wait_time = RETRY_CONFIG['base_delay'] * (2 ** attempt)
                     time.sleep(min(wait_time, RETRY_CONFIG['max_delay']))
@@ -187,9 +187,9 @@ class SeleniumDoubanFetcher:
             
             if len(search_results) == 0:
                 self.consecutive_no_results += 1
-                logger.warning(f"连续无结果次数: {self.consecutive_no_results}/{self.max_consecutive_no_results}")
+                main_logger.warning(f"连续无结果次数: {self.consecutive_no_results}/{self.max_consecutive_no_results}")
                 self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.NO_SEARCH_RESULT, self.worker_id)
-                logger.warning(f"无搜索结果: {vod_name}")
+                main_logger.warning(f"无搜索结果: {vod_name}")
                 return (vod_id, False, "无搜索结果")
             
             # 有结果，重置连续无结果计数
@@ -200,12 +200,12 @@ class SeleniumDoubanFetcher:
             
             if matched == 'multiple':
                 self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.MULTIPLE_RESULTS, self.worker_id)
-                logger.warning(f"匹配到多个结果: {vod_name}")
+                main_logger.warning(f"匹配到多个结果: {vod_name}")
                 return (vod_id, False, "匹配到多个结果")
             
             if matched is None:
                 self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.NO_MATCH_RESULT, self.worker_id)
-                logger.warning(f"未找到匹配结果: {vod_name}")
+                main_logger.warning(f"未找到匹配结果: {vod_name}")
                 return (vod_id, False, "未找到匹配")
             
             # 3. 获取豆瓣ID
@@ -255,7 +255,7 @@ class SeleniumDoubanFetcher:
             return (vod_id, True, msg)
             
         except Exception as e:
-            logger.error(f"处理视频 {vod_id} 时发生错误: {str(e)}")
+            main_logger.error(f"处理视频 {vod_id} 时发生错误: {str(e)}")
             try:
                 self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.ERROR, self.worker_id)
             except:

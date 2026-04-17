@@ -5,6 +5,7 @@ import pymysql
 import time
 from typing import List, Dict, Optional
 from .config import logger
+from douban_fetcher.config import logger as main_logger
 
 
 class DatabaseManager:

@@ -6,7 +6,7 @@ import os
 
 # 配置日志
 logger = logging.getLogger('selenium_fetcher')
-logger.setLevel(logging.WARNING)  # 只显示WARNING和ERROR级别的日志
+logger.setLevel(logging.INFO)  # 只显示WARNING和ERROR级别的日志
 # 如果想完全禁用，使用: logger.disabled = True
 
 if not logger.handlers:
