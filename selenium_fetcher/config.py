@@ -2,6 +2,7 @@
 Selenium方案配置模块
 """
 import logging
+import os
 
 # 配置日志
 logger = logging.getLogger('selenium_fetcher')
@@ -14,6 +15,9 @@ if not logger.handlers:
     )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+
+# 统计文件路径
+STATS_FILE = 'selenium_fetch_stats.json'
 
 # Selenium配置
 SELENIUM_CONFIG = {
