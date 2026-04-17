@@ -14,16 +14,19 @@ class DatabaseManager:
     
     def get_connection(self):
         """获取数据库连接"""
-        return pymysql.connect(
+        conn = pymysql.connect(
             host=self.db_config['host'],
             port=self.db_config.get('port', 3306),
             user=self.db_config['user'],
             password=self.db_config['password'],
             database=self.db_config['database'],
             charset='utf8mb4',
+            collation='utf8mb4_general_ci',  # 显式指定排序规则
             cursorclass=pymysql.cursors.DictCursor,
-            autocommit=True
+            autocommit=True,
+            init_command="SET NAMES utf8mb4 COLLATE utf8mb4_general_ci"  # 初始化命令
         )
+        return conn
     
     def get_pending_videos(self, limit: int = 500, status: int = 1) -> List[Dict]:
         """
@@ -95,12 +98,12 @@ class DatabaseManager:
                     imdb_votes = info.get('imdbVotes', 0) or 0
                     douban_votes = info.get('doubanVotes', 0) or 0
                     
-                    combined_score, combined_votes = DataProcessor.calculate_combined_score(
+                    """ combined_score, combined_votes = DataProcessor.calculate_combined_score(
                         imdb_rating, 
                         douban_rating,
                         imdb_votes,
                         douban_votes
-                    )
+                    ) """
                     
                     sql = """
                         UPDATE mac_vod 
