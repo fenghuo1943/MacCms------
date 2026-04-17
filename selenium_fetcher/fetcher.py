@@ -213,21 +213,21 @@ class SeleniumDoubanFetcher:
                 self.db.update_video_score(vod_id, {}, FetchStatus.ERROR)
                 return (vod_id, False, "获取豆瓣详情失败")
             
-            # 5. 准备数据库更新信息
+            # 5. 准备数据库更新信息（使用database.py期望的字段名）
             info = {
+                'doubanId': douban_id,  # 豆瓣ID
                 'doubanRating': movie_info.get('rating', 0.0),
                 'doubanVotes': movie_info.get('votes', 0),
-                'doubanDirector': movie_info.get('director', ''),
-                'doubanWriter': movie_info.get('writers', ''),
-                'doubanCast': movie_info.get('casts', ''),
-                'doubanGenre': movie_info.get('genres', ''),
-                'doubanCountry': movie_info.get('country', ''),
-                'doubanLanguage': movie_info.get('language', ''),
-                'doubanReleaseDate': movie_info.get('release_date', ''),
-                'doubanEpisodes': movie_info.get('episodes', 0),
-                'doubanDuration': movie_info.get('duration', 0),  # 单集片长或电影片长（分钟）
-                'doubanSummary': movie_info.get('summary', ''),
-                'imdb_id': movie_info.get('imdb_id', ''),
+                'imdbId': movie_info.get('imdb_id', ''),  # IMDB ID
+                'imdbRating': '',  # Selenium方案不获取IMDB评分
+                'imdbVotes': 0,
+                'writers': movie_info.get('writers', ''),
+                'description': movie_info.get('summary', ''),
+                'episodes': movie_info.get('episodes', 0),
+                'duration': movie_info.get('duration', 0),
+                'dateReleased': movie_info.get('release_date', ''),
+                'alias': '',  # 别名，Selenium方案暂不提取
+                'tags': movie_info.get('genres', ''),  # 类型作为标签
             }
             
             # 过滤掉值为0或空字符串的字段，不更新这些字段
@@ -244,12 +244,12 @@ class SeleniumDoubanFetcher:
                 self.db.update_video_score(vod_id, {}, FetchStatus.SUCCESS)
             
             msg = f"豆瓣:{info['doubanRating']}({info['doubanVotes']}人)"
-            if info.get('doubanGenre'):
-                msg += f" 类型:{info['doubanGenre'][:30]}"
-            if info.get('doubanEpisodes'):
-                msg += f" 集数:{info['doubanEpisodes']}"
-            if info.get('doubanDuration'):
-                msg += f" 片长:{info['doubanDuration']}分钟"
+            if info.get('tags'):
+                msg += f" 类型:{info['tags'][:30]}"
+            if info.get('episodes'):
+                msg += f" 集数:{info['episodes']}"
+            if info.get('duration'):
+                msg += f" 片长:{info['duration']}分钟"
             return (vod_id, True, msg)
             
         except Exception as e:
