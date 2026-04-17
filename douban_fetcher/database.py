@@ -104,21 +104,21 @@ class DatabaseManager:
                     
                     sql = """
                         UPDATE mac_vod 
-                        SET vod_douban_id = CASE WHEN %s != '' THEN %s ELSE vod_douban_id END,
+                        SET vod_douban_id = CASE WHEN LENGTH(%s) > 0 THEN %s ELSE vod_douban_id END,
                             vod_douban_score = CASE WHEN %s > 0 THEN %s ELSE vod_douban_score END,
-                            vod_imdb_id = CASE WHEN %s IS NOT NULL AND %s != '' THEN %s ELSE vod_imdb_id END,
+                            vod_imdb_id = CASE WHEN %s IS NOT NULL AND LENGTH(%s) > 0 THEN %s ELSE vod_imdb_id END,
                             vod_imdb_votes = CASE WHEN %s > 0 THEN %s ELSE vod_imdb_votes END,
-                            vod_imdb_rating = CASE WHEN %s IS NOT NULL AND %s != '' AND %s > 0 THEN %s ELSE vod_imdb_rating END,
+                            vod_imdb_rating = CASE WHEN %s IS NOT NULL AND LENGTH(%s) > 0 AND %s > 0 THEN %s ELSE vod_imdb_rating END,
                             vod_score = CASE WHEN %s > 0 THEN %s ELSE vod_score END,
                             vod_score_num = CASE WHEN %s > 0 THEN %s ELSE vod_score_num END,
-                            vod_writer = CASE WHEN %s != '' THEN LEFT(%s, 255) ELSE vod_writer END,
-                            vod_blurb = CASE WHEN %s != '' THEN LEFT(%s, 255) ELSE vod_blurb END,
-                            vod_content = CASE WHEN %s != '' THEN %s ELSE vod_content END,
+                            vod_writer = CASE WHEN LENGTH(%s) > 0 THEN LEFT(%s, 255) ELSE vod_writer END,
+                            vod_blurb = CASE WHEN LENGTH(%s) > 0 THEN LEFT(%s, 255) ELSE vod_blurb END,
+                            vod_content = CASE WHEN LENGTH(%s) > 0 THEN %s ELSE vod_content END,
                             vod_total = CASE WHEN %s > 0 THEN %s ELSE vod_total END,
                             vod_duration = CASE WHEN %s > 0 THEN %s ELSE vod_duration END,
-                            vod_pubdate = CASE WHEN %s != '' THEN LEFT(%s, 100) ELSE vod_pubdate END,
-                            vod_sub = CASE WHEN %s != '' THEN LEFT(%s, 255) ELSE vod_sub END,
-                            vod_tag = CASE WHEN %s != '' THEN LEFT(%s, 100) ELSE vod_tag END,
+                            vod_pubdate = CASE WHEN LENGTH(%s) > 0 THEN LEFT(%s, 100) ELSE vod_pubdate END,
+                            vod_sub = CASE WHEN LENGTH(%s) > 0 THEN LEFT(%s, 255) ELSE vod_sub END,
+                            vod_tag = CASE WHEN LENGTH(%s) > 0 THEN LEFT(%s, 100) ELSE vod_tag END,
                             vod_fetch_status = %s
                         WHERE vod_id = %s
                     """
