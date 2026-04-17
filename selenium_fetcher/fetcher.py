@@ -230,8 +230,18 @@ class SeleniumDoubanFetcher:
                 'imdb_id': movie_info.get('imdb_id', ''),
             }
             
-            # 6. 更新数据库
-            self.db.update_video_score(vod_id, info, FetchStatus.SUCCESS)
+            # 过滤掉值为0或空字符串的字段，不更新这些字段
+            filtered_info = {
+                key: value for key, value in info.items()
+                if value != 0 and value != 0.0 and value != '' and value is not None
+            }
+            
+            # 6. 更新数据库（只更新有值的字段）
+            if filtered_info:
+                self.db.update_video_score(vod_id, filtered_info, FetchStatus.SUCCESS)
+            else:
+                # 如果所有字段都为空，仍然标记为成功
+                self.db.update_video_score(vod_id, {}, FetchStatus.SUCCESS)
             
             msg = f"豆瓣:{info['doubanRating']}({info['doubanVotes']}人)"
             if info.get('doubanGenre'):
