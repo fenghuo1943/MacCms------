@@ -104,13 +104,13 @@ class DatabaseManager:
                     
                     sql = """
                         UPDATE mac_vod 
-                        SET vod_douban_id = %s,
-                            vod_douban_score = %s,
-                            vod_imdb_id = CASE WHEN %s IS NOT NULL THEN %s ELSE vod_imdb_id END,
+                        SET vod_douban_id = CASE WHEN %s != '' THEN %s ELSE vod_douban_id END,
+                            vod_douban_score = CASE WHEN %s > 0 THEN %s ELSE vod_douban_score END,
+                            vod_imdb_id = CASE WHEN %s IS NOT NULL AND %s != '' THEN %s ELSE vod_imdb_id END,
                             vod_imdb_votes = CASE WHEN %s > 0 THEN %s ELSE vod_imdb_votes END,
-                            vod_imdb_rating = CASE WHEN %s IS NOT NULL AND %s != '' THEN %s ELSE vod_imdb_rating END,
-                            vod_score = %s,
-                            vod_score_num = %s,
+                            vod_imdb_rating = CASE WHEN %s IS NOT NULL AND %s != '' AND %s > 0 THEN %s ELSE vod_imdb_rating END,
+                            vod_score = CASE WHEN %s > 0 THEN %s ELSE vod_score END,
+                            vod_score_num = CASE WHEN %s > 0 THEN %s ELSE vod_score_num END,
                             vod_writer = CASE WHEN %s != '' THEN LEFT(%s, 255) ELSE vod_writer END,
                             vod_blurb = CASE WHEN %s != '' THEN LEFT(%s, 255) ELSE vod_blurb END,
                             vod_content = CASE WHEN %s != '' THEN %s ELSE vod_content END,
@@ -123,24 +123,39 @@ class DatabaseManager:
                         WHERE vod_id = %s
                     """
                     cursor.execute(sql, (
-                        info['doubanId'],
-                        info['doubanRating'],
-                        info['imdbId'], info['imdbId'],
-                        info['imdbVotes'], info['imdbVotes'],
-                        info['imdbRating'], info['imdbRating'], info['imdbRating'],
-                        #combined_score,
-                        info['doubanRating'],
-                        #combined_votes,
-                        info['doubanVotes'],
-                        info['writers'], info['writers'],
-                        info['description'], info['description'],
-                        info['description'], info['description'],
-                        info['episodes'], info['episodes'],
-                        info['duration'], str(info['duration']),
-                        info['dateReleased'], info['dateReleased'],
-                        info['alias'], info['alias'],
-                        info['tags'], info['tags'],
+                        # vod_douban_id
+                        info.get('doubanId', ''), info.get('doubanId', ''),
+                        # vod_douban_score
+                        info.get('doubanRating', 0), info.get('doubanRating', 0),
+                        # vod_imdb_id
+                        info.get('imdbId'), info.get('imdbId'), info.get('imdbId'),
+                        # vod_imdb_votes
+                        info.get('imdbVotes', 0), info.get('imdbVotes', 0),
+                        # vod_imdb_rating
+                        info.get('imdbRating'), info.get('imdbRating'), info.get('imdbRating', 0), info.get('imdbRating', 0),
+                        # vod_score (豆瓣评分)
+                        info.get('doubanRating', 0), info.get('doubanRating', 0),
+                        # vod_score_num (豆瓣投票数)
+                        info.get('doubanVotes', 0), info.get('doubanVotes', 0),
+                        # vod_writer
+                        info.get('writers', ''), info.get('writers', ''),
+                        # vod_blurb (简介)
+                        info.get('description', ''), info.get('description', ''),
+                        # vod_content (详细内容)
+                        info.get('description', ''), info.get('description', ''),
+                        # vod_total (集数)
+                        info.get('episodes', 0), info.get('episodes', 0),
+                        # vod_duration (片长)
+                        info.get('duration', 0), str(info.get('duration', 0)),
+                        # vod_pubdate (上映日期)
+                        info.get('dateReleased', ''), info.get('dateReleased', ''),
+                        # vod_sub (别名)
+                        info.get('alias', ''), info.get('alias', ''),
+                        # vod_tag (类型标签)
+                        info.get('tags', ''), info.get('tags', ''),
+                        # vod_fetch_status
                         status,
+                        # vod_id
                         vod_id
                     ))
                 else:
