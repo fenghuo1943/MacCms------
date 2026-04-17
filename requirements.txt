@@ -8,3 +8,8 @@ requests>=2.31.0
 # python-dotenv>=1.0.0  # 环境变量管理
 # tqdm>=4.66.0          # 进度条显示
 # colorama>=0.4.6       # 彩色终端输出
+
+# Selenium方案依赖
+selenium>=4.15.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0

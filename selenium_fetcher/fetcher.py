@@ -1,0 +1,352 @@
+"""
+Selenium方案主获取器模块
+"""
+import time
+import json
+import os
+from typing import Dict, Tuple, Optional
+from datetime import datetime
+
+# 复用douban_fetcher的数据库和模型
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from douban_fetcher.database import DatabaseManager
+from douban_fetcher.models import FetchStatus
+from douban_fetcher.config import logger as main_logger
+
+from .config import logger, SELENIUM_CONFIG, DOUBAN_MOVIE_URL, RETRY_CONFIG, STATS_FILE
+from .browser import BrowserManager
+from .extractor import DoubanPageExtractor
+
+
+class SeleniumDoubanFetcher:
+    """基于Selenium的豆瓣评分获取器"""
+    
+    def __init__(self, db_config: Dict[str, any], selenium_config: Dict = None):
+        """
+        初始化获取器
+        
+        Args:
+            db_config: 数据库配置
+            selenium_config: Selenium配置
+        """
+        # 初始化组件
+        self.db = DatabaseManager(db_config)
+        self.browser_manager = BrowserManager(selenium_config or SELENIUM_CONFIG.copy())
+        self.extractor = DoubanPageExtractor()
+        
+        # 统计文件
+        self.stats_file = STATS_FILE
+        self.load_stats()
+        
+        # 连续无结果计数器
+        self.consecutive_no_results = 0
+        self.max_consecutive_no_results = 20
+    
+    def load_stats(self):
+        """加载统计信息（断点续传）"""
+        if os.path.exists(self.stats_file):
+            try:
+                with open(self.stats_file, 'r', encoding='utf-8') as f:
+                    self.stats = json.load(f)
+                logger.info(f"加载历史统计: {self.stats}")
+            except:
+                self.stats = {'start_time': None, 'total_processed': 0, 'total_success': 0}
+        else:
+            self.stats = {'start_time': None, 'total_processed': 0, 'total_success': 0}
+    
+    def save_stats(self):
+        """保存统计信息"""
+        with open(self.stats_file, 'w', encoding='utf-8') as f:
+            json.dump(self.stats, f, ensure_ascii=False, indent=2)
+    
+    def search_douban(self, video_name: str) -> Optional[list]:
+        """
+        使用Selenium搜索豆瓣
+        
+        Args:
+            video_name: 视频名称
+            
+        Returns:
+            搜索结果列表，失败返回None
+        """
+        driver = self.browser_manager.get_driver()
+        
+        for attempt in range(RETRY_CONFIG['max_retries']):
+            try:
+                url = f"https://www.douban.com/search?q={video_name}"
+                logger.info(f"正在搜索: {video_name} (尝试 {attempt + 1}/{RETRY_CONFIG['max_retries']})")
+                
+                # 访问搜索页面
+                driver.get(url)
+                
+                # 等待页面加载
+                time.sleep(3)
+                
+                # 获取页面HTML
+                html_content = driver.page_source
+                
+                # 检查是否被拦截
+                if 'sec' in html_content and 'tok' in html_content:
+                    logger.warning("检测到豆瓣反爬虫验证，等待后重试...")
+                    wait_time = RETRY_CONFIG['base_delay'] * (2 ** attempt)
+                    time.sleep(min(wait_time, RETRY_CONFIG['max_delay']))
+                    continue
+                
+                # 提取搜索结果
+                results = self.extractor.extract_search_results(html_content)
+                return results
+                
+            except Exception as e:
+                logger.error(f"搜索时出错: {str(e)}")
+                if attempt < RETRY_CONFIG['max_retries'] - 1:
+                    wait_time = RETRY_CONFIG['base_delay'] * (2 ** attempt)
+                    time.sleep(min(wait_time, RETRY_CONFIG['max_delay']))
+                    continue
+                return None
+        
+        return None
+    
+    def get_movie_detail(self, douban_id: str) -> Optional[Dict]:
+        """
+        获取豆瓣电影详情
+        
+        Args:
+            douban_id: 豆瓣ID
+            
+        Returns:
+            电影详细信息，失败返回None
+        """
+        driver = self.browser_manager.get_driver()
+        
+        for attempt in range(RETRY_CONFIG['max_retries']):
+            try:
+                url = DOUBAN_MOVIE_URL.format(douban_id=douban_id)
+                logger.info(f"正在获取详情: {douban_id} (尝试 {attempt + 1}/{RETRY_CONFIG['max_retries']})")
+                
+                # 访问详情页
+                driver.get(url)
+                
+                # 等待页面加载
+                time.sleep(3)
+                
+                # 获取页面HTML
+                html_content = driver.page_source
+                
+                # 检查是否被拦截
+                if 'sec' in html_content and 'tok' in html_content:
+                    logger.warning("检测到豆瓣反爬虫验证，等待后重试...")
+                    wait_time = RETRY_CONFIG['base_delay'] * (2 ** attempt)
+                    time.sleep(min(wait_time, RETRY_CONFIG['max_delay']))
+                    continue
+                
+                # 提取详细信息
+                movie_info = self.extractor.extract_movie_info(html_content)
+                return movie_info
+                
+            except Exception as e:
+                logger.error(f"获取详情时出错: {str(e)}")
+                if attempt < RETRY_CONFIG['max_retries'] - 1:
+                    wait_time = RETRY_CONFIG['base_delay'] * (2 ** attempt)
+                    time.sleep(min(wait_time, RETRY_CONFIG['max_delay']))
+                    continue
+                return None
+        
+        return None
+    
+    def process_single_video(self, video: Dict) -> Tuple[int, bool, str]:
+        """
+        处理单个视频
+        
+        Args:
+            video: 视频信息字典
+            
+        Returns:
+            (vod_id, success, message)
+        """
+        vod_id = video['vod_id']
+        vod_name = video['vod_name']
+        vod_year = video.get('vod_year', '')
+        
+        try:
+            # 1. 搜索豆瓣
+            search_results = self.search_douban(vod_name)
+            
+            if search_results is None:
+                self.db.update_video_score(vod_id, {}, FetchStatus.ERROR)
+                return (vod_id, False, "豆瓣搜索失败")
+            
+            if len(search_results) == 0:
+                self.consecutive_no_results += 1
+                logger.warning(f"连续无结果次数: {self.consecutive_no_results}/{self.max_consecutive_no_results}")
+                self.db.update_video_score(vod_id, {}, FetchStatus.NO_RESULT)
+                return (vod_id, False, "无搜索结果")
+            
+            # 有结果，重置连续无结果计数
+            self.consecutive_no_results = 0
+            
+            # 2. 匹配视频（简单匹配第一个结果）
+            matched = None
+            for result in search_results:
+                if vod_name in result['title'] or result['title'] in vod_name:
+                    # 如果提供了年份，尝试验证
+                    if vod_year and result['year']:
+                        if vod_year == result['year']:
+                            matched = result
+                            break
+                    else:
+                        matched = result
+                        break
+            
+            # 如果没有精确匹配，使用第一个结果
+            if not matched and search_results:
+                matched = search_results[0]
+            
+            if not matched:
+                self.db.update_video_score(vod_id, {}, FetchStatus.NO_RESULT)
+                return (vod_id, False, "未找到匹配")
+            
+            # 3. 获取豆瓣ID
+            douban_id = matched.get('id', '')
+            if not douban_id:
+                self.db.update_video_score(vod_id, {}, FetchStatus.ERROR)
+                return (vod_id, False, "无法获取豆瓣ID")
+            
+            # 4. 获取详细信息
+            movie_info = self.get_movie_detail(douban_id)
+            
+            if not movie_info:
+                self.db.update_video_score(vod_id, {}, FetchStatus.ERROR)
+                return (vod_id, False, "获取豆瓣详情失败")
+            
+            # 5. 准备数据库更新信息
+            info = {
+                'doubanRating': movie_info.get('rating', 0.0),
+                'doubanVotes': movie_info.get('votes', 0),
+                'doubanDirector': movie_info.get('director', ''),
+                'doubanWriter': movie_info.get('writers', ''),
+                'doubanCast': movie_info.get('casts', ''),
+                'doubanGenre': movie_info.get('genres', ''),
+                'doubanCountry': movie_info.get('country', ''),
+                'doubanLanguage': movie_info.get('language', ''),
+                'doubanReleaseDate': movie_info.get('release_date', ''),
+                'doubanEpisodes': movie_info.get('episodes', 0),
+                'doubanSummary': movie_info.get('summary', ''),
+                'imdb_id': movie_info.get('imdb_id', ''),
+            }
+            
+            # 6. 更新数据库
+            self.db.update_video_score(vod_id, info, FetchStatus.SUCCESS)
+            
+            msg = f"豆瓣:{info['doubanRating']}({info['doubanVotes']}人)"
+            if info.get('doubanGenre'):
+                msg += f" 类型:{info['doubanGenre'][:30]}"
+            if info.get('doubanEpisodes'):
+                msg += f" 集数:{info['doubanEpisodes']}"
+            return (vod_id, True, msg)
+            
+        except Exception as e:
+            logger.error(f"处理视频 {vod_id} 时发生错误: {str(e)}")
+            try:
+                self.db.update_video_score(vod_id, {}, FetchStatus.ERROR)
+            except:
+                pass
+            return (vod_id, False, f"异常: {str(e)[:50]}")
+    
+    @staticmethod
+    def format_eta(seconds: float) -> str:
+        """格式化剩余时间"""
+        if seconds < 60:
+            return f"{int(seconds)}秒"
+        elif seconds < 3600:
+            return f"{int(seconds/60)}分钟"
+        else:
+            hours = int(seconds / 3600)
+            minutes = int((seconds % 3600) / 60)
+            return f"{hours}小时{minutes}分钟"
+    
+    def run(self, batch_size: int = 50):
+        """
+        运行主任务
+        
+        Args:
+            batch_size: 每批处理数量
+        """
+        main_logger.info("=" * 70)
+        main_logger.info("开始Selenium豆瓣评分获取任务")
+        main_logger.info(f"配置: 批次大小={batch_size}")
+        main_logger.info("=" * 70)
+        
+        if self.stats['start_time'] is None:
+            self.stats['start_time'] = datetime.now().isoformat()
+        
+        total_processed = self.stats['total_processed']
+        total_success = self.stats['total_success']
+        start_time = time.time()
+        
+        try:
+            while True:
+                pending_count = self.db.get_total_pending()
+                if pending_count == 0:
+                    main_logger.info("✓ 所有视频已处理完成！")
+                    break
+                
+                main_logger.info(f"\n{'='*70}")
+                main_logger.info(f"剩余待处理: {pending_count} 个视频")
+                
+                videos = self.db.get_pending_videos(limit=batch_size)
+                if not videos:
+                    break
+                
+                batch_start = time.time()
+                batch_success = 0
+                
+                for i, video in enumerate(videos, 1):
+                    vod_id, success, msg = self.process_single_video(video)
+                    
+                    if success:
+                        total_success += 1
+                        batch_success += 1
+                        if i % 5 == 0 or i == len(videos):
+                            main_logger.info(f"  [{i}/{len(videos)}] ✓ ID:{vod_id}")
+                    else:
+                        if i % 5 == 0 or i == len(videos):
+                            main_logger.warning(f"  [{i}/{len(videos)}] ✗ ID:{vod_id} - {msg}")
+                    
+                    total_processed += 1
+                    
+                    elapsed = time.time() - start_time
+                    avg_speed = total_processed / elapsed if elapsed > 0 else 0
+                    remaining = pending_count - (total_processed - self.stats['total_processed'])
+                    eta = remaining / avg_speed if avg_speed > 0 else 0
+                    
+                    if i % 10 == 0:
+                        main_logger.info(f"  进度: {total_processed} | 成功: {total_success} | "
+                                      f"速度: {avg_speed:.2f}/s | 预计剩余: {self.format_eta(eta)}")
+                    
+                    self.stats['total_processed'] = total_processed
+                    self.stats['total_success'] = total_success
+                    self.save_stats()
+                
+                batch_elapsed = time.time() - batch_start
+                main_logger.info(f"批次完成: {len(videos)}个, 成功{batch_success}个, "
+                               f"耗时{batch_elapsed:.1f}秒")
+                
+                # 检查连续无结果次数
+                if self.consecutive_no_results >= self.max_consecutive_no_results:
+                    main_logger.warning(f"检测到连续无结果次数达到阈值 ({self.consecutive_no_results}), "
+                                     f"自动停止任务")
+                    break
+        
+        finally:
+            # 确保浏览器关闭
+            self.browser_manager.quit_driver()
+        
+        total_elapsed = time.time() - start_time
+        main_logger.info("\n" + "=" * 70)
+        main_logger.info("任务完成！")
+        main_logger.info(f"总处理: {total_processed} 个")
+        main_logger.info(f"成功: {total_success} 个 ({total_success/total_processed*100:.1f}%)")
+        main_logger.info(f"总耗时: {self.format_eta(total_elapsed)}")
+        main_logger.info(f"平均速度: {total_processed/total_elapsed:.2f} 个/秒")
+        main_logger.info("=" * 70)
