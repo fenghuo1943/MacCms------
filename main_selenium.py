@@ -21,7 +21,7 @@ def main():
     # 可选：Selenium配置
     selenium_config = {
         'browser': 'chrome',      # 浏览器类型: chrome, firefox
-        'headless': True,         # 是否无头模式（后台运行）
+        'headless': False,         # 是否无头模式（后台运行）
         'timeout': 30,            # 页面加载超时时间(秒)
         'implicit_wait': 10,      # 隐式等待时间(秒)
     }

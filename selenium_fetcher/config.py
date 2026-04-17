@@ -44,10 +44,10 @@ RETRY_CONFIG = {
 
 # 数据库配置示例（与主项目保持一致）
 DB_CONFIG_EXAMPLE = {
-    'host': 'localhost',
-    'port': 3306,
-    'user': 'root',
-    'password': 'your_password',
+    'host': '192.168.114.4',
+    'port': 3307,
+    'user': 'maccms',
+    'password': 'q5DdyjsI5%GJOr',
     'database': 'maccms',
     'charset': 'utf8mb4'
 }

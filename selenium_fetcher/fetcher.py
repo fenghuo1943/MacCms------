@@ -7,12 +7,14 @@ import os
 from typing import Dict, Tuple, Optional
 from datetime import datetime
 
-# 复用douban_fetcher的数据库和模型
+# 复用douban_fetcher的数据库、模型和API客户端
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from douban_fetcher.database import DatabaseManager
 from douban_fetcher.models import FetchStatus
 from douban_fetcher.config import logger as main_logger
+from douban_fetcher.api_client import ApiClient
+from douban_fetcher.data_processor import DataProcessor
 
 from .config import logger, SELENIUM_CONFIG, DOUBAN_MOVIE_URL, RETRY_CONFIG, STATS_FILE
 from .browser import BrowserManager
@@ -32,6 +34,7 @@ class SeleniumDoubanFetcher:
         """
         # 初始化组件
         self.db = DatabaseManager(db_config)
+        self.api_client = ApiClient()  # 使用API进行搜索
         self.browser_manager = BrowserManager(selenium_config or SELENIUM_CONFIG.copy())
         self.extractor = DoubanPageExtractor()
         
@@ -62,7 +65,7 @@ class SeleniumDoubanFetcher:
     
     def search_douban(self, video_name: str) -> Optional[list]:
         """
-        使用Selenium搜索豆瓣
+        使用豆瓣API搜索（快速）
         
         Args:
             video_name: 视频名称
@@ -70,42 +73,43 @@ class SeleniumDoubanFetcher:
         Returns:
             搜索结果列表，失败返回None
         """
-        driver = self.browser_manager.get_driver()
-        
-        for attempt in range(RETRY_CONFIG['max_retries']):
-            try:
-                url = f"https://www.douban.com/search?q={video_name}"
-                logger.info(f"正在搜索: {video_name} (尝试 {attempt + 1}/{RETRY_CONFIG['max_retries']})")
-                
-                # 访问搜索页面
-                driver.get(url)
-                
-                # 等待页面加载
-                time.sleep(3)
-                
-                # 获取页面HTML
-                html_content = driver.page_source
-                
-                # 检查是否被拦截
-                if 'sec' in html_content and 'tok' in html_content:
-                    logger.warning("检测到豆瓣反爬虫验证，等待后重试...")
-                    wait_time = RETRY_CONFIG['base_delay'] * (2 ** attempt)
-                    time.sleep(min(wait_time, RETRY_CONFIG['max_delay']))
-                    continue
-                
-                # 提取搜索结果
-                results = self.extractor.extract_search_results(html_content)
-                return results
-                
-            except Exception as e:
-                logger.error(f"搜索时出错: {str(e)}")
-                if attempt < RETRY_CONFIG['max_retries'] - 1:
-                    wait_time = RETRY_CONFIG['base_delay'] * (2 ** attempt)
-                    time.sleep(min(wait_time, RETRY_CONFIG['max_delay']))
-                    continue
+        try:
+            logger.info(f"使用API搜索: {video_name}")
+            
+            # 使用豆瓣API搜索
+            search_results = self.api_client.search_douban(video_name)
+            
+            if search_results is None:
+                logger.warning("API搜索失败")
                 return None
-        
-        return None
+            
+            # 转换API结果为统一格式
+            results = []
+            for item in search_results:
+                subject = item.get('subject', {})
+                douban_id = subject.get('id', '')
+                title = subject.get('title', '')
+                year = subject.get('year', '')
+                
+                # 确定类型
+                subtype = subject.get('subtype', '')
+                content_type = 'movie' if subtype == 'movie' else 'tv'
+                
+                if douban_id and title:
+                    results.append({
+                        'id': str(douban_id),
+                        'title': title,
+                        'year': str(year) if year else '',
+                        'type': content_type,
+                        'url': f'https://movie.douban.com/subject/{douban_id}/'
+                    })
+            
+            logger.info(f"API搜索到 {len(results)} 个结果")
+            return results
+            
+        except Exception as e:
+            logger.error(f"API搜索时出错: {str(e)}")
+            return None
     
     def get_movie_detail(self, douban_id: str) -> Optional[Dict]:
         """
@@ -156,7 +160,7 @@ class SeleniumDoubanFetcher:
     
     def process_single_video(self, video: Dict) -> Tuple[int, bool, str]:
         """
-        处理单个视频
+        处理单个视频（API搜索 + Selenium详情）
         
         Args:
             video: 视频信息字典
@@ -169,7 +173,7 @@ class SeleniumDoubanFetcher:
         vod_year = video.get('vod_year', '')
         
         try:
-            # 1. 搜索豆瓣
+            # 1. 使用API搜索豆瓣（快速）
             search_results = self.search_douban(vod_name)
             
             if search_results is None:
@@ -185,24 +189,14 @@ class SeleniumDoubanFetcher:
             # 有结果，重置连续无结果计数
             self.consecutive_no_results = 0
             
-            # 2. 匹配视频（简单匹配第一个结果）
-            matched = None
-            for result in search_results:
-                if vod_name in result['title'] or result['title'] in vod_name:
-                    # 如果提供了年份，尝试验证
-                    if vod_year and result['year']:
-                        if vod_year == result['year']:
-                            matched = result
-                            break
-                    else:
-                        matched = result
-                        break
+            # 2. 匹配视频（使用DataProcessor）
+            matched = DataProcessor.match_douban_search_results(search_results, vod_name, vod_year)
             
-            # 如果没有精确匹配，使用第一个结果
-            if not matched and search_results:
-                matched = search_results[0]
+            if matched == 'multiple':
+                self.db.update_video_score(vod_id, {}, FetchStatus.MULTIPLE_RESULTS)
+                return (vod_id, False, "匹配到多个结果")
             
-            if not matched:
+            if matched is None:
                 self.db.update_video_score(vod_id, {}, FetchStatus.NO_RESULT)
                 return (vod_id, False, "未找到匹配")
             
@@ -212,7 +206,7 @@ class SeleniumDoubanFetcher:
                 self.db.update_video_score(vod_id, {}, FetchStatus.ERROR)
                 return (vod_id, False, "无法获取豆瓣ID")
             
-            # 4. 获取详细信息
+            # 4. 使用Selenium获取详细信息（网页更完整）
             movie_info = self.get_movie_detail(douban_id)
             
             if not movie_info:
