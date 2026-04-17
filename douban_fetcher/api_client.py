@@ -143,7 +143,7 @@ class ApiClient:
                     url,
                     data=data,
                     timeout=DOUBAN_API_CONFIG['timeout'],
-                    proxies=proxies
+                    #proxies=proxies
                 )
                 
                 if response.status_code == 429:
