@@ -111,3 +111,5 @@ docs/_build/
 dmypy.json
 
 Edge/
+
+selenium_fetch_stats_*.json
