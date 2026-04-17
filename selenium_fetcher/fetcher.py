@@ -35,7 +35,7 @@ class SeleniumDoubanFetcher:
         # 初始化组件
         self.db = DatabaseManager(db_config)
         self.api_client = ApiClient()  # 使用API进行搜索
-        self.browser_manager = BrowserManager(selenium_config or SELENIUM_CONFIG.copy())
+        self.browser_manager = BrowserManager(selenium_config)  # BrowserManager会自动合并配置
         self.extractor = DoubanPageExtractor()
         
         # 统计文件
@@ -87,12 +87,12 @@ class SeleniumDoubanFetcher:
             results = []
             for item in search_results:
                 subject = item.get('subject', {})
-                douban_id = subject.get('id', '')
-                title = subject.get('title', '')
-                year = subject.get('year', '')
+                douban_id = item.get('id', '')
+                title = item.get('title', '')
+                year = item.get('year', '')
                 
                 # 确定类型
-                subtype = subject.get('subtype', '')
+                subtype = item.get('subtype', '')
                 content_type = 'movie' if subtype == 'movie' else 'tv'
                 
                 if douban_id and title:
