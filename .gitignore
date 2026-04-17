@@ -66,6 +66,12 @@ coverage.xml
 *.log
 report_*.json
 fetch_stats.json
+selenium_fetch_stats.json
+
+# Selenium驱动
+chromedriver.exe
+msedgedriver.exe
+geckodriver.exe
 
 # 测试脚本（可选，如果想保留测试脚本则删除下面这行）
 # test_*.py
