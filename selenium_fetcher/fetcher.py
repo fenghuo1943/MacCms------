@@ -15,6 +15,7 @@ from douban_fetcher.models import FetchStatus
 from douban_fetcher.config import logger as main_logger
 from douban_fetcher.api_client import ApiClient
 from douban_fetcher.data_processor import DataProcessor
+from douban_fetcher.worker_config import get_worker_id
 
 from .config import logger, SELENIUM_CONFIG, DOUBAN_MOVIE_URL, RETRY_CONFIG, STATS_FILE
 from .browser import BrowserManager
@@ -38,8 +39,12 @@ class SeleniumDoubanFetcher:
         self.browser_manager = BrowserManager(selenium_config)  # BrowserManager会自动合并配置
         self.extractor = DoubanPageExtractor()
         
-        # 统计文件
-        self.stats_file = STATS_FILE
+        # 设备标识
+        self.worker_id = get_worker_id()
+        logger.info(f"当前设备标识: {self.worker_id}")
+        
+        # 统计文件（每个设备独立的统计文件）
+        self.stats_file = f"selenium_fetch_stats_{self.worker_id}.json"
         self.load_stats()
         
         # 连续无结果计数器
@@ -177,13 +182,13 @@ class SeleniumDoubanFetcher:
             search_results = self.search_douban(vod_name)
             
             if search_results is None:
-                self.db.update_video_score(vod_id, {}, FetchStatus.ERROR)
+                self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.ERROR, self.worker_id)
                 return (vod_id, False, "豆瓣搜索失败")
             
             if len(search_results) == 0:
                 self.consecutive_no_results += 1
                 logger.warning(f"连续无结果次数: {self.consecutive_no_results}/{self.max_consecutive_no_results}")
-                self.db.update_video_score(vod_id, {}, FetchStatus.NO_SEARCH_RESULT)
+                self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.NO_SEARCH_RESULT, self.worker_id)
                 logger.warning(f"无搜索结果: {vod_name}")
                 return (vod_id, False, "无搜索结果")
             
@@ -194,26 +199,26 @@ class SeleniumDoubanFetcher:
             matched = DataProcessor.match_douban_search_results(search_results, vod_name, vod_year)
             
             if matched == 'multiple':
-                self.db.update_video_score(vod_id, {}, FetchStatus.MULTIPLE_RESULTS)
+                self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.MULTIPLE_RESULTS, self.worker_id)
                 logger.warning(f"匹配到多个结果: {vod_name}")
                 return (vod_id, False, "匹配到多个结果")
             
             if matched is None:
-                self.db.update_video_score(vod_id, {}, FetchStatus.NO_MATCH_RESULT)
+                self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.NO_MATCH_RESULT, self.worker_id)
                 logger.warning(f"未找到匹配结果: {vod_name}")
                 return (vod_id, False, "未找到匹配")
             
             # 3. 获取豆瓣ID
             douban_id = matched.get('id', '')
             if not douban_id:
-                self.db.update_video_score(vod_id, {}, FetchStatus.ERROR)
+                self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.ERROR, self.worker_id)
                 return (vod_id, False, "无法获取豆瓣ID")
             
             # 4. 使用Selenium获取详细信息（网页更完整）
             movie_info = self.get_movie_detail(douban_id)
             
             if not movie_info:
-                self.db.update_video_score(vod_id, {}, FetchStatus.ERROR)
+                self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.ERROR, self.worker_id)
                 return (vod_id, False, "获取豆瓣详情失败")
             
             # 5. 准备数据库更新信息（使用database.py期望的字段名）
@@ -233,8 +238,8 @@ class SeleniumDoubanFetcher:
                 'tags': movie_info.get('genres', ''),  # 类型作为标签
             }
             
-            # 6. 更新数据库（SQL层面已做条件判断，空值不会覆盖原有数据）
-            self.db.update_video_score(vod_id, info, FetchStatus.SUCCESS)
+            # 6. 更新数据库并释放锁定（SQL层面已做条件判断，空值不会覆盖原有数据）
+            self.db.update_video_score_with_unlock(vod_id, info, FetchStatus.SUCCESS, self.worker_id)
             
             msg = f"豆瓣:{info['doubanRating']}({info['doubanVotes']}人)"
             if info.get('tags'):
@@ -243,12 +248,16 @@ class SeleniumDoubanFetcher:
                 msg += f" 集数:{info['episodes']}"
             if info.get('duration'):
                 msg += f" 片长:{info['duration']}分钟"
+            
+            # 使用主程序的logger输出成功信息（可选）
+            # main_logger.info(f"✓ ID:{vod_id} {vod_name} - {msg}")
+            
             return (vod_id, True, msg)
             
         except Exception as e:
             logger.error(f"处理视频 {vod_id} 时发生错误: {str(e)}")
             try:
-                self.db.update_video_score(vod_id, {}, FetchStatus.ERROR)
+                self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.ERROR, self.worker_id)
             except:
                 pass
             return (vod_id, False, f"异常: {str(e)[:50]}")
@@ -274,6 +283,7 @@ class SeleniumDoubanFetcher:
         """
         main_logger.info("=" * 70)
         main_logger.info("开始Selenium豆瓣评分获取任务")
+        main_logger.info(f"设备标识: {self.worker_id}")
         main_logger.info(f"配置: 批次大小={batch_size}")
         main_logger.info("=" * 70)
         
@@ -286,17 +296,22 @@ class SeleniumDoubanFetcher:
         
         try:
             while True:
+                # 使用原子锁定机制获取视频
+                videos = self.db.lock_videos_atomically(self.worker_id, limit=batch_size)
+                
                 pending_count = self.db.get_total_pending()
-                if pending_count == 0:
+                if pending_count == 0 and not videos:
                     main_logger.info("✓ 所有视频已处理完成！")
                     break
                 
+                if not videos:
+                    main_logger.info("暂无可处理的视频，等待中...")
+                    time.sleep(10)
+                    continue
+                
                 main_logger.info(f"\n{'='*70}")
                 main_logger.info(f"剩余待处理: {pending_count} 个视频")
-                
-                videos = self.db.get_pending_videos(limit=batch_size)
-                if not videos:
-                    break
+                main_logger.info(f"本批次锁定: {len(videos)} 个视频")
                 
                 batch_start = time.time()
                 batch_success = 0

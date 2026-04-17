@@ -13,6 +13,7 @@ from .rate_limiter import TokenBucket, RateLimitMonitor
 from .database import DatabaseManager
 from .api_client import ApiClient
 from .data_processor import DataProcessor
+from .worker_config import get_worker_id
 
 
 class DoubanScoreFetcher:
@@ -37,8 +38,12 @@ class DoubanScoreFetcher:
         self.rate_limiter = TokenBucket(rate=max_requests_per_second, capacity=5)
         self.monitor = RateLimitMonitor()
         
-        # 统计文件
-        self.stats_file = STATS_FILE
+        # 设备标识
+        self.worker_id = get_worker_id()
+        logger.info(f"当前设备标识: {self.worker_id}")
+        
+        # 统计文件（每个设备独立的统计文件）
+        self.stats_file = f"fetch_stats_{self.worker_id}.json"
         self.load_stats()
         
         # 添加连续无结果计数器
@@ -86,7 +91,7 @@ class DoubanScoreFetcher:
             
             if search_results is None:
                 # API请求失败
-                self.db.update_video_score(vod_id, {}, FetchStatus.ERROR)
+                self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.ERROR, self.worker_id)
                 # 增加连续失败计数（已经在api_client中处理）
                 return (vod_id, False, "豆瓣API请求失败")
             
@@ -94,7 +99,7 @@ class DoubanScoreFetcher:
                 # 无结果 - 增加连续无结果计数
                 self.consecutive_no_results += 1
                 logger.warning(f"连续无结果次数: {self.consecutive_no_results}/{self.max_consecutive_no_results}")
-                self.db.update_video_score(vod_id, {}, FetchStatus.NO_SEARCH_RESULT)
+                self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.NO_SEARCH_RESULT, self.worker_id)
                 return (vod_id, False, "无搜索结果")
             
             # 有结果，重置连续无结果计数
@@ -105,25 +110,25 @@ class DoubanScoreFetcher:
             
             if matched == 'multiple':
                 # 多个结果
-                self.db.update_video_score(vod_id, {}, FetchStatus.MULTIPLE_RESULTS)
+                self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.MULTIPLE_RESULTS, self.worker_id)
                 return (vod_id, False, "匹配到多个结果")
             
             if matched is None:
                 # 无匹配（有搜索结果但无法精确匹配）
-                self.db.update_video_score(vod_id, {}, FetchStatus.NO_MATCH_RESULT)
+                self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.NO_MATCH_RESULT, self.worker_id)
                 return (vod_id, False, "未找到匹配")
             
             # 3. 获取豆瓣ID
             douban_id = matched.get('id', '')
             if not douban_id:
-                self.db.update_video_score(vod_id, {}, FetchStatus.ERROR)
+                self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.ERROR, self.worker_id)
                 return (vod_id, False, "无法获取豆瓣ID")
             
             # 4. 使用Subject API获取详细信息
             subject_data = self.api_client.get_douban_subject(douban_id, monitor=self.monitor)
             
             if not subject_data:
-                self.db.update_video_score(vod_id, {}, FetchStatus.ERROR)
+                self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.ERROR, self.worker_id)
                 return (vod_id, False, "获取豆瓣详情失败")
             
             # 5. 提取豆瓣信息
@@ -132,8 +137,8 @@ class DoubanScoreFetcher:
             # 6. 准备数据库更新信息
             info = DataProcessor.prepare_db_info_from_douban(douban_info)
             
-            # 7. 更新数据库
-            self.db.update_video_score(vod_id, info, FetchStatus.SUCCESS)
+            # 7. 更新数据库并释放锁定
+            self.db.update_video_score_with_unlock(vod_id, info, FetchStatus.SUCCESS, self.worker_id)
             
             msg = f"豆瓣:{info['doubanRating']}({info['doubanVotes']}人)"
             if info.get('tags'):
@@ -145,7 +150,7 @@ class DoubanScoreFetcher:
         except Exception as e:
             logger.error(f"处理视频 {vod_id} 时发生错误: {str(e)}")
             try:
-                self.db.update_video_score(vod_id, {}, FetchStatus.ERROR)
+                self.db.update_video_score_with_unlock(vod_id, {}, FetchStatus.ERROR, self.worker_id)
             except:
                 pass
             return (vod_id, False, f"异常: {str(e)[:50]}")
@@ -175,6 +180,7 @@ class DoubanScoreFetcher:
         """
         logger.info("=" * 70)
         logger.info("开始豆瓣评分获取任务（生产级版本）")
+        logger.info(f"设备标识: {self.worker_id}")
         logger.info(f"配置: 速率={max_requests_per_second}req/s, 批次大小={batch_size}")
         logger.info("=" * 70)
         
@@ -186,19 +192,24 @@ class DoubanScoreFetcher:
         start_time = time.time()
         
         while True:
+            # 使用原子锁定机制获取视频
+            videos = self.db.lock_videos_atomically(self.worker_id, limit=batch_size)
+            
             pending_count = self.db.get_total_pending()
-            if pending_count == 0:
+            if pending_count == 0 and not videos:
                 logger.info("✓ 所有视频已处理完成！")
                 break
             
+            if not videos:
+                logger.info("暂无可处理的视频，等待中...")
+                time.sleep(10)
+                continue
+            
             logger.info(f"\n{'='*70}")
             logger.info(f"剩余待处理: {pending_count} 个视频")
+            logger.info(f"本批次锁定: {len(videos)} 个视频")
             logger.info(f"当前速率: {self.monitor.get_current_rate():.2f} req/s")
             logger.info(f"统计: {json.dumps(self.monitor.get_stats(), ensure_ascii=False)}")
-            
-            videos = self.db.get_pending_videos(limit=batch_size)
-            if not videos:
-                break
             
             batch_start = time.time()
             batch_success = 0

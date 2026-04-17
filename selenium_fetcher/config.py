@@ -6,8 +6,8 @@ import os
 
 # 配置日志
 logger = logging.getLogger('selenium_fetcher')
-logger.setLevel(logging.CRITICAL)  # 设置为CRITICAL，几乎不输出任何日志
-logger.disabled = True  # 完全禁用此logger的输出
+logger.setLevel(logging.WARNING)  # 只显示WARNING和ERROR级别的日志
+# 如果想完全禁用，使用: logger.disabled = True
 
 if not logger.handlers:
     handler = logging.StreamHandler()
