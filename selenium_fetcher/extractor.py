@@ -6,6 +6,7 @@ from typing import Dict, Optional
 from bs4 import BeautifulSoup
 
 from .config import logger
+from douban_fetcher.config import logger as main_logger
 
 
 class DoubanPageExtractor:
@@ -73,10 +74,10 @@ class DoubanPageExtractor:
                     })
                     
             except Exception as e:
-                logger.warning(f"提取搜索结果项时出错: {str(e)}")
+                main_logger.warning(f"提取搜索结果项时出错: {str(e)}")
                 continue
         
-        logger.info(f"从搜索页面提取到 {len(results)} 个结果")
+        main_logger.info(f"从搜索页面提取到 {len(results)} 个结果")
         return results
     
     @staticmethod
@@ -290,5 +291,5 @@ class DoubanPageExtractor:
         else:
             info['summary'] = ''
         
-        logger.info(f"成功提取电影信息: {info.get('title', 'Unknown')}")
+        main_logger.info(f"成功提取电影信息: {info.get('title', 'Unknown')}")
         return info
