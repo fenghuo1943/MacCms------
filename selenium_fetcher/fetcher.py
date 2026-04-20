@@ -232,10 +232,10 @@ class SeleniumDoubanFetcher:
                 main_logger.warning(f"无搜索结果: {vod_id} {vod_name}")
                 
                 # 检查是否达到连续无结果阈值，如果是则设置停止标志
-                """ if self.consecutive_no_results >= self.max_consecutive_no_results:
+                if self.consecutive_no_results >= self.max_consecutive_no_results:
                     main_logger.warning(f"检测到连续无结果次数达到阈值 ({self.consecutive_no_results}), "
                                      f"将在当前视频处理后停止任务")
-                    self.stop_requested = True """
+                    self.stop_requested = True
                 
                 return (vod_id, False, "无搜索结果")
             
@@ -407,10 +407,7 @@ class SeleniumDoubanFetcher:
                                         f"自动停止任务")
                         break
                     
-                    # 如果已经请求停止，退出循环
-                    if self.check_stop_condition():
-                        main_logger.info(f"已处理 {i}/{len(videos)} 个视频后停止")
-                        break
+                    
                 
                 # 如果是因停止请求而退出内层循环，则也退出外层循环
                 if self.check_stop_condition():
@@ -419,7 +416,10 @@ class SeleniumDoubanFetcher:
                 batch_elapsed = time.time() - batch_start
                 main_logger.info(f"批次完成: {len(videos)}个, 成功{batch_success}个, "
                                f"耗时{batch_elapsed:.1f}秒")
-                
+                # 如果已经请求停止，退出循环
+                if self.check_stop_condition():
+                    main_logger.info(f"已处理 {i}/{len(videos)} 个视频后停止")
+                    break
                 
         
         finally:
