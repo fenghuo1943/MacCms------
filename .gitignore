@@ -113,3 +113,4 @@ dmypy.json
 Edge/
 
 selenium_fetch_stats_*.json
+stop_*.flag
