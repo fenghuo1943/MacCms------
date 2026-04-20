@@ -113,4 +113,8 @@ dmypy.json
 Edge/
 
 selenium_fetch_stats_*.json
+<<<<<<< HEAD
 stop_*.flag
+=======
+selenium_fetcher/config.py
+>>>>>>> d6308243b7b39d3532854db4b132a52361892d8a
